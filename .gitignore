@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+server/node_modules/
+
+# Build outputs
+frontend/dist/
+server/dist/
+contracts/target/
+
+# Environment files (contain secrets)
+.env
+frontend/.env
+server/.env
+
+# Logs
+*.log
+/tmp/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Screenshots / local files
+*.png
+*.jpeg
+*.jpg

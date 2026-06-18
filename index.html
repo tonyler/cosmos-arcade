@@ -1,0 +1,1075 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CosmosArcade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Space+Mono:wght@400;700&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet">
+<style>
+/* ── TOKENS ──────────────────────────────────────────────────────────────── */
+:root {
+  --bg:             #0d0f14;
+  --bg2:            #0f1119;
+  --surface:        #111520;
+  --surface2:       #161c2a;
+  --border:         #1a2035;
+  --border-hi:      #2a3358;
+  --accent:         #7c3aed;
+  --accent-hi:      #8b5cf6;
+  --accent-bright:  #a78bfa;
+  --accent-dim:     rgba(124,58,237,0.18);
+  --accent-glow:    rgba(124,58,237,0.32);
+  --accent-glow-hi: rgba(124,58,237,0.55);
+  --text:           #dde3f0;
+  --text-muted:     #5a6a8a;
+  --text-dim:       #2a3354;
+  --green:          #22c55e;
+  --amber:          #f59e0b;
+  --red:            #ef4444;
+  --cyan:           #38bdf8;
+  --pink:           #ec4899;
+  --font-px:  'Press Start 2P', monospace;
+  --font-mono: 'Space Mono', monospace;
+  --font-ui:   'DM Sans', sans-serif;
+}
+
+/* ── RESET ───────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+button { cursor: pointer; }
+input, button { font-family: inherit; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* scanline overlay — subtle CRT texture */
+body::before {
+  content: '';
+  position: fixed; inset: 0; z-index: 9990;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent 0px, transparent 3px,
+    rgba(0,0,0,0.05) 3px, rgba(0,0,0,0.05) 4px
+  );
+  pointer-events: none;
+}
+
+/* phosphor vignette */
+body::after {
+  content: '';
+  position: fixed; inset: 0; z-index: 9989;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%);
+  pointer-events: none;
+}
+
+/* ── ROOT LAYOUT ─────────────────────────────────────────────────────────── */
+.app {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ── LEFT SIDEBAR ────────────────────────────────────────────────────────── */
+.sidebar-left {
+  width: 210px;
+  min-width: 210px;
+  background: var(--bg2);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  z-index: 20;
+}
+
+/* accent glow stripe on right edge */
+.sidebar-left::after {
+  content: '';
+  position: absolute; top: 0; right: -1px; bottom: 0; width: 1px;
+  background: linear-gradient(to bottom,
+    transparent 0%,
+    var(--accent) 30%,
+    var(--accent) 70%,
+    transparent 100%);
+  opacity: 0.25;
+}
+
+.logo-block {
+  padding: 22px 18px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.logo-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-dim);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.logo-name {
+  font-family: var(--font-px);
+  font-size: 9px;
+  color: var(--text);
+  letter-spacing: 0.04em;
+  line-height: 1.5;
+}
+
+.logo-name em {
+  color: var(--accent-bright);
+  font-style: normal;
+}
+
+nav { padding: 12px 0; flex: 1; }
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 18px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  position: relative;
+  transition: color 0.12s, background 0.12s;
+  user-select: none;
+}
+
+.nav-item:not(.disabled) { cursor: pointer; }
+
+.nav-item:hover:not(.disabled) {
+  color: var(--text);
+  background: var(--accent-dim);
+}
+
+.nav-item.active {
+  color: var(--text);
+  background: rgba(124,58,237,0.12);
+}
+
+.nav-item.active::before {
+  content: '';
+  position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--accent-glow-hi);
+}
+
+.nav-item.disabled {
+  opacity: 0.38;
+  pointer-events: none;
+}
+
+.nav-icon {
+  width: 16px; text-align: center;
+  font-size: 13px; flex-shrink: 0;
+}
+
+/* coming-soon badge */
+.badge-soon {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 700;
+  color: var(--amber);
+  background: rgba(245,158,11,0.1);
+  border: 1px solid rgba(245,158,11,0.28);
+  padding: 2px 5px;
+  letter-spacing: 0.06em;
+}
+
+.sidebar-foot {
+  padding: 14px 18px;
+  border-top: 1px solid var(--border);
+}
+
+.online-pill {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.online-dot {
+  width: 6px; height: 6px;
+  background: var(--green);
+  border-radius: 50%;
+  animation: pulse-green 2.5s ease-in-out infinite;
+}
+
+@keyframes pulse-green {
+  0%,100% { box-shadow: 0 0 0 0 rgba(34,197,94,0.7); }
+  50%      { box-shadow: 0 0 0 5px rgba(34,197,94,0); }
+}
+
+/* ── MAIN COLUMN ─────────────────────────────────────────────────────────── */
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+/* ── TOPBAR ──────────────────────────────────────────────────────────────── */
+.topbar {
+  height: 58px;
+  min-height: 58px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 22px;
+  position: relative;
+  z-index: 10;
+}
+
+.topbar-logo {
+  font-family: var(--font-px);
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  color: var(--text);
+}
+
+.topbar-logo em {
+  color: var(--accent-bright);
+  font-style: normal;
+}
+
+/* ── WALLET BUTTON — chunky 3D press ────────────────────────────────────── */
+.wallet-btn {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  padding: 10px 20px;
+  position: relative;
+  transition: transform 0.07s ease, box-shadow 0.07s ease, background 0.12s;
+  /* clipped top-right + bottom-left corner = arcade chamfer */
+  clip-path: polygon(
+    0 0, calc(100% - 8px) 0, 100% 8px,
+    100% 100%, 8px 100%, 0 calc(100% - 8px)
+  );
+  box-shadow:
+    0 5px 0 #3b0f8a,
+    0 7px 18px rgba(124,58,237,0.5);
+}
+
+.wallet-btn:hover {
+  background: var(--accent-hi);
+  box-shadow:
+    0 5px 0 #3b0f8a,
+    0 10px 28px rgba(124,58,237,0.65);
+}
+
+.wallet-btn:active {
+  transform: translateY(5px);
+  box-shadow:
+    0 0 0 #3b0f8a,
+    0 2px 8px rgba(124,58,237,0.3);
+}
+
+/* connected state */
+.wallet-btn.connected {
+  background: var(--surface2);
+  border: 1px solid var(--border-hi);
+  clip-path: none;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 14px;
+  box-shadow:
+    0 3px 0 #0a0d18,
+    0 4px 12px rgba(0,0,0,0.4);
+}
+
+.wallet-btn.connected:hover {
+  background: rgba(124,58,237,0.1);
+  border-color: var(--accent);
+}
+
+.wallet-btn.connected:active {
+  transform: translateY(3px);
+  box-shadow: 0 0 0 #0a0d18;
+}
+
+.wallet-addr {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* pixel identicon */
+.wallet-ident {
+  width: 24px; height: 24px;
+  flex-shrink: 0;
+  display: block;
+  image-rendering: pixelated;
+}
+
+/* ── GAME CONTENT AREA ───────────────────────────────────────────────────── */
+.content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 26px 24px 40px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.content::-webkit-scrollbar { width: 5px; }
+.content::-webkit-scrollbar-thumb { background: var(--border); }
+
+.section-header {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.section-title {
+  font-family: var(--font-px);
+  font-size: 9px;
+  font-weight: normal;
+  letter-spacing: 0.06em;
+  color: var(--text);
+}
+
+.section-count {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+/* ── GAME GRID ───────────────────────────────────────────────────────────── */
+.game-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 14px;
+}
+
+/* ── GAME CARD ───────────────────────────────────────────────────────────── */
+.game-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  position: relative;
+  transition: border-color 0.18s, box-shadow 0.18s, transform 0.15s;
+  animation: card-reveal 0.38s ease both;
+}
+
+/* stagger each card — works for up to 12 cards */
+.game-card:nth-child(1)  { animation-delay: 0.04s; }
+.game-card:nth-child(2)  { animation-delay: 0.08s; }
+.game-card:nth-child(3)  { animation-delay: 0.12s; }
+.game-card:nth-child(4)  { animation-delay: 0.16s; }
+.game-card:nth-child(5)  { animation-delay: 0.20s; }
+.game-card:nth-child(6)  { animation-delay: 0.24s; }
+.game-card:nth-child(7)  { animation-delay: 0.28s; }
+.game-card:nth-child(8)  { animation-delay: 0.32s; }
+.game-card:nth-child(9)  { animation-delay: 0.36s; }
+.game-card:nth-child(10) { animation-delay: 0.40s; }
+.game-card:nth-child(11) { animation-delay: 0.44s; }
+.game-card:nth-child(12) { animation-delay: 0.48s; }
+
+@keyframes card-reveal {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.game-card:hover {
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 1px var(--accent),
+    0 0 28px var(--accent-glow),
+    inset 0 0 20px rgba(124,58,237,0.04);
+  transform: translateY(-3px);
+}
+
+/* thumbnail */
+.game-thumb {
+  aspect-ratio: 16 / 9;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+/* placeholder: pixel grid + slot hint */
+.game-thumb-inner {
+  position: absolute; inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background-color: #080b12;
+  /* pixel grid */
+  background-image:
+    linear-gradient(rgba(124,58,237,0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(124,58,237,0.07) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+/* when a real image is used, it fills this */
+.game-thumb img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+  image-rendering: pixelated;
+}
+
+.thumb-icon { font-size: 22px; opacity: 0.22; }
+
+.thumb-hint {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
+}
+
+/* hover play overlay */
+.game-thumb::after {
+  content: '▶  PLAY';
+  font-family: var(--font-px);
+  font-size: 7px;
+  letter-spacing: 0.12em;
+  position: absolute; inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(124,58,237,0.72);
+  color: #fff;
+  opacity: 0;
+  transition: opacity 0.14s;
+}
+
+.game-card:hover .game-thumb::after { opacity: 1; }
+
+/* card footer */
+.game-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 11px;
+  border-top: 1px solid var(--border);
+}
+
+.game-title {
+  font-family: var(--font-px);
+  font-size: 6.5px;
+  color: var(--text);
+  letter-spacing: 0.04em;
+  line-height: 1.5;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-right: 8px;
+}
+
+/* small 3D play button */
+.play-btn {
+  width: 28px; height: 28px;
+  background: var(--accent);
+  border: none;
+  color: #fff;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.12s, box-shadow 0.07s, transform 0.07s;
+  box-shadow: 0 3px 0 #3b0f8a;
+}
+
+.play-btn:hover {
+  background: var(--accent-hi);
+  box-shadow: 0 3px 0 #3b0f8a, 0 4px 12px var(--accent-glow);
+}
+
+.play-btn:active {
+  transform: translateY(3px);
+  box-shadow: 0 0 0 #3b0f8a;
+}
+
+/* ── CHAT SIDEBAR ────────────────────────────────────────────────────────── */
+.chat-sidebar {
+  width: 274px;
+  min-width: 274px;
+  background: var(--bg2);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  transition: width 0.26s cubic-bezier(0.4,0,0.2,1),
+              min-width 0.26s cubic-bezier(0.4,0,0.2,1);
+  z-index: 20;
+}
+
+.chat-sidebar.collapsed {
+  width: 0;
+  min-width: 0;
+  border-left-color: transparent;
+}
+
+/* collapse toggle — sits on the outer edge */
+.chat-toggle {
+  position: absolute;
+  top: 50%;
+  left: -16px;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 46px;
+  background: var(--surface);
+  border: 1px solid var(--border-hi);
+  border-right: none;
+  color: var(--text-dim);
+  font-size: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 30;
+  transition: color 0.12s, background 0.12s, border-color 0.12s;
+}
+
+.chat-toggle:hover {
+  color: var(--text);
+  background: var(--accent-dim);
+  border-color: var(--accent);
+}
+
+.chat-toggle .arr {
+  display: inline-block;
+  transition: transform 0.26s;
+}
+
+.chat-sidebar.collapsed .chat-toggle .arr { transform: rotate(180deg); }
+
+/* inner wrapper fades out on collapse */
+.chat-inner {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  transition: opacity 0.18s;
+}
+
+.chat-sidebar.collapsed .chat-inner {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* tabs */
+.chat-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.chat-tab {
+  flex: 1;
+  padding: 11px 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  position: relative;
+  transition: color 0.12s, background 0.12s;
+}
+
+.chat-tab.active {
+  color: var(--text);
+  background: rgba(124,58,237,0.07);
+}
+
+.chat-tab.active::after {
+  content: '';
+  position: absolute; bottom: -1px; left: 0; right: 0; height: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent-glow);
+}
+
+.chat-tab:hover:not(.active) {
+  color: var(--text);
+  background: rgba(255,255,255,0.025);
+}
+
+.dm-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 14px; height: 14px;
+  background: var(--red);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 700;
+  padding: 0 3px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+/* panels */
+.chat-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.chat-panel.hidden { display: none; }
+
+/* messages list */
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.chat-messages::-webkit-scrollbar { width: 3px; }
+.chat-messages::-webkit-scrollbar-thumb { background: var(--border); }
+
+.chat-msg { animation: msg-in 0.18s ease; }
+
+@keyframes msg-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.msg-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 2px;
+}
+
+.msg-user {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent-bright);
+}
+
+.msg-user.c-cyan  { color: var(--cyan); }
+.msg-user.c-pink  { color: var(--pink); }
+.msg-user.c-green { color: var(--green); }
+.msg-user.c-amber { color: var(--amber); }
+
+.msg-time {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  color: var(--text-dim);
+}
+
+.msg-text {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.chat-msg.sys .msg-text {
+  font-size: 10px;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+/* chat input row */
+.chat-input-row {
+  display: flex;
+  gap: 6px;
+  padding: 10px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.chat-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 12px;
+  padding: 7px 10px;
+  outline: none;
+  transition: border-color 0.12s, box-shadow 0.12s;
+  border-radius: 0;
+}
+
+.chat-input::placeholder { color: var(--text-dim); }
+
+.chat-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(124,58,237,0.28);
+}
+
+.send-btn {
+  width: 32px; height: 32px;
+  background: var(--accent);
+  border: none;
+  color: #fff;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.12s, transform 0.07s, box-shadow 0.07s;
+  box-shadow: 0 2px 0 #3b0f8a;
+}
+
+.send-btn:hover  { background: var(--accent-hi); }
+.send-btn:active { transform: translateY(2px); box-shadow: none; }
+
+/* DM list */
+.dm-panel {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.dm-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.dm-row:hover { background: var(--accent-dim); }
+
+.dm-av {
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.dm-info { min-width: 0; flex: 1; }
+
+.dm-name {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.dm-preview {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* unread dot */
+.dm-unread {
+  width: 7px; height: 7px;
+  background: var(--accent);
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ── LEFT SIDEBAR ──────────────────────────────────────────────────── -->
+  <aside class="sidebar-left">
+    <div class="logo-block">
+      <div class="logo-eyebrow">⬡ Cosmos Hub</div>
+      <div class="logo-name">COSMOS<em>ARCADE</em></div>
+    </div>
+
+    <nav>
+      <div class="nav-item active">
+        <span class="nav-icon">⊞</span>
+        Home
+      </div>
+      <div class="nav-item disabled">
+        <span class="nav-icon">⚔</span>
+        Tournaments
+        <span class="badge-soon">SOON</span>
+      </div>
+    </nav>
+
+    <div class="sidebar-foot">
+      <div class="online-pill">
+        <div class="online-dot"></div>
+        <span id="onlineCount">47 online</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── MAIN ──────────────────────────────────────────────────────────── -->
+  <div class="main">
+
+    <!-- topbar -->
+    <header class="topbar">
+      <div class="topbar-logo">COSMOS<em>ARCADE</em></div>
+      <button class="wallet-btn" id="walletBtn" onclick="toggleWallet()">
+        Connect Wallet
+      </button>
+    </header>
+
+    <!-- game grid -->
+    <div class="content">
+      <div class="section-header">
+        <h1 class="section-title">All Games</h1>
+        <span class="section-count" id="gameCount"></span>
+      </div>
+      <div class="game-grid" id="gameGrid"></div>
+    </div>
+
+  </div>
+
+  <!-- ── CHAT SIDEBAR ───────────────────────────────────────────────────── -->
+  <aside class="chat-sidebar" id="chatSidebar">
+    <button class="chat-toggle" onclick="toggleChat()" title="Toggle chat">
+      <span class="arr">◀</span>
+    </button>
+
+    <div class="chat-inner">
+      <!-- tabs -->
+      <div class="chat-tabs">
+        <button class="chat-tab active" onclick="switchTab('general', this)">
+          General
+        </button>
+        <button class="chat-tab" onclick="switchTab('dms', this)">
+          DMs <span class="dm-badge">2</span>
+        </button>
+      </div>
+
+      <!-- GENERAL panel -->
+      <div class="chat-panel" id="panel-general">
+        <div class="chat-messages" id="chatMessages"></div>
+        <div class="chat-input-row">
+          <input class="chat-input" id="chatInput" type="text"
+            placeholder="Message #general…"
+            onkeydown="if(event.key==='Enter') sendMsg()">
+          <button class="send-btn" onclick="sendMsg()">↑</button>
+        </div>
+      </div>
+
+      <!-- DMs panel -->
+      <div class="chat-panel hidden" id="panel-dms">
+        <div class="dm-panel" id="dmList"></div>
+      </div>
+    </div>
+  </aside>
+
+</div>
+
+<script>
+/* ── GAME REGISTRY ─────────────────────────────────────────────────────────
+   To add a game:
+     { slug: 'my-game', title: 'My Game', thumb: '/assets/games/my-game.jpg' }
+   Leave `thumb` undefined for the placeholder slot.
+─────────────────────────────────────────────────────────────────────────── */
+const GAMES = [
+  { slug: 'snake',          title: 'Snake'          },
+  { slug: 'tetris',         title: 'Tetris'         },
+  { slug: 'pong',           title: 'Pong'           },
+  { slug: 'asteroids',      title: 'Asteroids'      },
+  { slug: 'breakout',       title: 'Breakout'       },
+  { slug: 'space-invaders', title: 'Space Invaders' },
+  { slug: 'pacman',         title: 'Pac-Man'        },
+  { slug: 'flappy-cosmos',  title: 'Flappy Cosmos'  },
+];
+
+function renderGames() {
+  const grid = document.getElementById('gameGrid');
+  document.getElementById('gameCount').textContent =
+    GAMES.length + ' game' + (GAMES.length !== 1 ? 's' : '');
+
+  grid.innerHTML = GAMES.map(g => `
+    <div class="game-card" onclick="launchGame('${g.slug}')">
+      <div class="game-thumb">
+        ${g.thumb
+          ? `<img src="${g.thumb}" alt="${g.title}">`
+          : `<div class="game-thumb-inner">
+               <span class="thumb-icon">🕹</span>
+               <span class="thumb-hint">${g.slug}.jpg</span>
+             </div>`
+        }
+      </div>
+      <div class="game-footer">
+        <span class="game-title">${g.title}</span>
+        <button class="play-btn" onclick="event.stopPropagation();launchGame('${g.slug}')">▶</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function launchGame(slug) {
+  // TODO: navigate to /<slug> or open match modal
+  console.log('[arcade] launch:', slug);
+}
+
+/* ── WALLET ──────────────────────────────────────────────────────────────── */
+let walletConnected = false;
+
+function toggleWallet() {
+  walletConnected = !walletConnected;
+  const btn = document.getElementById('walletBtn');
+  if (walletConnected) {
+    const canvas = makeIdenticon('cosmos1xkqf8j2vm7r2');
+    btn.className = 'wallet-btn connected';
+    btn.innerHTML = '';
+    btn.appendChild(canvas);
+    const addr = document.createElement('span');
+    addr.className = 'wallet-addr';
+    addr.textContent = 'cosmos1xkq…m7r2';
+    btn.appendChild(addr);
+  } else {
+    btn.className = 'wallet-btn';
+    btn.textContent = 'Connect Wallet';
+  }
+}
+
+/* deterministic pixel identicon from address string */
+function makeIdenticon(addr) {
+  const canvas = document.createElement('canvas');
+  canvas.className = 'wallet-ident';
+  canvas.width = canvas.height = 24;
+  const ctx = canvas.getContext('2d');
+  // simple hash
+  let h = 0;
+  for (let i = 0; i < addr.length; i++) h = (Math.imul(31, h) + addr.charCodeAt(i)) | 0;
+  const hue = Math.abs(h) % 360;
+  ctx.fillStyle = '#0d0f14';
+  ctx.fillRect(0, 0, 24, 24);
+  ctx.fillStyle = `hsl(${hue},70%,65%)`;
+  for (let y = 0; y < 5; y++) {
+    for (let x = 0; x < 3; x++) {
+      if ((h >> (y * 3 + x)) & 1) {
+        ctx.fillRect(x * 4 + 2, y * 4 + 2, 3, 3);
+        if (x < 2) ctx.fillRect(18 - x * 4, y * 4 + 2, 3, 3);
+      }
+    }
+  }
+  return canvas;
+}
+
+/* ── CHAT ────────────────────────────────────────────────────────────────── */
+let chatOpen = true;
+
+function toggleChat() {
+  chatOpen = !chatOpen;
+  document.getElementById('chatSidebar').classList.toggle('collapsed', !chatOpen);
+}
+
+const SEED_MSGS = [
+  { user: 'BlockWizard',   cls: 'c-cyan',  time: '4m',  text: 'gg last match 🔥' },
+  { user: 'stellarBytes',  cls: '',        time: '3m',  text: 'anyone want to play tetris?' },
+  { user: 'novaRunner',    cls: 'c-pink',  time: '2m',  text: 'wagering 5 ATOM on next game' },
+  { user: '⬡ system',     cls: 'c-green', time: '1m',  text: 'cosmosplayer joined the arcade', sys: true },
+  { user: 'cosmosplayer',  cls: 'c-amber', time: '1m',  text: 'hey all! ready to lose some ATOM 😂' },
+  { user: 'BlockWizard',   cls: 'c-cyan',  time: 'now', text: 'rematch time 👀' },
+];
+
+const DMS = [
+  { name: 'BlockWizard', preview: 'gg last game!',     color: '#38bdf8', unread: true  },
+  { name: 'novaRunner',  preview: 'rematch? 5 ATOM',  color: '#ec4899', unread: true  },
+  { name: 'stellarBytes',preview: 'nice moves',        color: '#a78bfa', unread: false },
+];
+
+function renderSeedMsgs() {
+  const el = document.getElementById('chatMessages');
+  el.innerHTML = SEED_MSGS.map(m => `
+    <div class="chat-msg${m.sys ? ' sys' : ''}">
+      ${!m.sys ? `<div class="msg-header">
+        <span class="msg-user ${m.cls}">${m.user}</span>
+        <span class="msg-time">${m.time} ago</span>
+      </div>` : ''}
+      <div class="msg-text">${m.text}</div>
+    </div>
+  `).join('');
+  el.scrollTop = el.scrollHeight;
+}
+
+function renderDMs() {
+  document.getElementById('dmList').innerHTML = DMS.map(d => `
+    <div class="dm-row">
+      <div class="dm-av" style="background:${d.color}22;color:${d.color}">${d.name[0]}</div>
+      <div class="dm-info">
+        <div class="dm-name">${d.name}</div>
+        <div class="dm-preview">${d.preview}</div>
+      </div>
+      ${d.unread ? '<div class="dm-unread"></div>' : ''}
+    </div>
+  `).join('');
+}
+
+function switchTab(id, el) {
+  document.querySelectorAll('.chat-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.chat-panel').forEach(p => p.classList.add('hidden'));
+  document.getElementById('panel-' + id).classList.remove('hidden');
+}
+
+function sendMsg() {
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim();
+  if (!text) return;
+  const el = document.getElementById('chatMessages');
+  const name = walletConnected ? 'cosmos1xkq…m7r2' : 'Guest';
+  el.insertAdjacentHTML('beforeend', `
+    <div class="chat-msg">
+      <div class="msg-header">
+        <span class="msg-user">${name}</span>
+        <span class="msg-time">now</span>
+      </div>
+      <div class="msg-text">${text.replace(/</g,'&lt;')}</div>
+    </div>
+  `);
+  el.scrollTop = el.scrollHeight;
+  input.value = '';
+}
+
+/* ── INIT ────────────────────────────────────────────────────────────────── */
+renderGames();
+renderSeedMsgs();
+renderDMs();
+
+// simulate live player count drift
+setInterval(() => {
+  const n = 44 + Math.floor(Math.random() * 8);
+  document.getElementById('onlineCount').textContent = n + ' online';
+}, 6000);
+</script>
+</body>
+</html>
