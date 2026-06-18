@@ -4,15 +4,20 @@ import Navbar from './components/layout/Navbar'
 import ChatSidebar from './components/layout/ChatSidebar'
 import GameGrid from './components/lobby/GameGrid'
 import GamePage from './pages/GamePage'
+import SettingsPage from './pages/SettingsPage'
 import AdminPage from './pages/AdminPage'
+import PacManGame from './games/pacman/PacManGame'
 import { useRouterStore } from './store/routerStore'
 import { useMatchStore } from './store/matchStore'
 import type { Denom } from './lib/escrow'
 
-const IS_ADMIN = new URLSearchParams(window.location.search).has('admin')
+const IS_ADMIN   = new URLSearchParams(window.location.search).has('admin')
+const IS_PACTEST = new URLSearchParams(window.location.search).has('test') &&
+                   new URLSearchParams(window.location.search).get('test') === 'pacman'
 
 function MainApp() {
   const currentGame = useRouterStore((s) => s.currentGame)
+  const settingsOpen = useRouterStore((s) => s.settingsOpen)
   const navigate = useRouterStore((s) => s.navigate)
   const setJoinTarget = useMatchStore((s) => s.setJoinTarget)
 
@@ -35,7 +40,7 @@ function MainApp() {
   if (currentGame) return <GamePage slug={currentGame} />
 
   return (
-    <div className="relative flex h-screen overflow-hidden font-ui text-slate-200 bg-c-bg">
+    <div className="relative flex overflow-hidden font-ui text-slate-200 bg-c-bg" style={{ zoom: 1.1, height: 'calc(100vh / 1.1)' }}>
 
       {/* ── BACKGROUND LAYERS (fixed, pointer-events-none) ────────────────── */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none select-none">
@@ -178,7 +183,7 @@ function MainApp() {
         <div className="flex flex-col flex-1 overflow-hidden min-w-0">
           <Navbar />
           <main className="flex-1 overflow-y-auto">
-            <GameGrid />
+            {settingsOpen ? <SettingsPage /> : <GameGrid />}
           </main>
         </div>
 
@@ -190,6 +195,15 @@ function MainApp() {
   )
 }
 
+function PacManTestPage() {
+  return (
+    <div className="min-h-screen bg-black flex items-center justify-center overflow-auto py-8">
+      <PacManGame />
+    </div>
+  )
+}
+
 export default function App() {
+  if (IS_PACTEST) return <PacManTestPage />
   return IS_ADMIN ? <AdminPage /> : <MainApp />
 }
