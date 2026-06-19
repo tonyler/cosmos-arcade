@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useMatchStore } from '../store/matchStore'
 import { useWalletStore } from '../store/walletStore'
 import ConnectButton from '../components/wallet/ConnectButton'
@@ -11,25 +11,44 @@ interface Props {
 }
 
 export default function MatchGate({ gameSlug, onClose }: Props) {
-  const { address, connected } = useWalletStore()
-  const { phase, joinTarget, shareLink, iAmReady, opponentReady, countdown, error, createBet, joinBet, markReady } = useMatchStore()
+  const { address, connected, guestId, ensureWsConnected } = useWalletStore()
+  const playerId = address ?? guestId
+  const {
+    phase, joinTarget, shareLink, iAmReady, opponentReady, countdown, error,
+    createBet, joinBet, startCasual, joinCasual, markReady,
+  } = useMatchStore()
 
+  const [selectedMode, setSelectedMode] = useState<'casual' | 'competitive' | null>(null)
   const [amount, setAmount] = useState('1')
   const [denom, setDenom] = useState<Denom>('uatom')
   const [isPublic, setIsPublic] = useState(true)
   const [opponent, setOpponent] = useState('')
   const [copied, setCopied] = useState(false)
 
-  // Always blocks until the match is live
+  // Reset mode selection when store resets to idle
+  useEffect(() => {
+    if (phase === 'idle') setSelectedMode(null)
+  }, [phase])
+
+  // Always hidden while game is live
   if (phase === 'playing' || phase === 'settling' || phase === 'complete') return null
 
   const isJoinMode = !!joinTarget
+  const isCasualJoin = isJoinMode && !!joinTarget?.isCasual
 
   const copyLink = () => {
     if (!shareLink) return
     navigator.clipboard.writeText(shareLink)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  const headerLabel = () => {
+    if (phase === 'ready') return 'MATCH READY'
+    if (isJoinMode) return isCasualJoin ? 'CASUAL MATCH' : 'JOIN MATCH'
+    if (selectedMode === null) return 'SELECT MODE'
+    if (selectedMode === 'casual') return 'CASUAL MATCH'
+    return 'PLACE WAGER'
   }
 
   return (
@@ -50,12 +69,16 @@ export default function MatchGate({ gameSlug, onClose }: Props) {
         <div className="w-full max-w-sm mx-4 bg-c-surface border border-c-border flex flex-col">
           <div className="flex items-center justify-between px-5 py-4 border-b border-c-border">
             <span className="font-px text-[9px] tracking-widest text-slate-200">
-              {phase === 'ready' ? 'MATCH READY' : isJoinMode ? 'JOIN MATCH' : 'PLACE WAGER'}
+              {headerLabel()}
             </span>
             <div className="flex items-center gap-3">
-              {connected && address && (
+              {connected && address ? (
                 <span className="font-mono text-[10px] text-violet-400 bg-violet-900/30 border border-violet-800/40 px-2 py-0.5">
                   {address.slice(0, 8)}…{address.slice(-4)}
+                </span>
+              ) : (
+                <span className="font-mono text-[10px] text-slate-500 bg-slate-800/40 border border-slate-700/40 px-2 py-0.5">
+                  GUEST
                 </span>
               )}
               <button onClick={onClose} className="text-slate-500 hover:text-slate-300 text-lg leading-none">×</button>
@@ -67,12 +90,51 @@ export default function MatchGate({ gameSlug, onClose }: Props) {
               <div className="font-mono text-xs text-red-400 bg-red-900/20 border border-red-800/40 px-3 py-2">{error}</div>
             )}
 
-            {/* idle: join mode */}
-            {phase === 'idle' && isJoinMode && (
+            {/* ── MODE SELECTION ── */}
+            {phase === 'idle' && !isJoinMode && selectedMode === null && (
+              <>
+                <Field label="MODE">
+                  <div className="flex gap-2">
+                    {(['casual', 'competitive'] as const).map((m) => (
+                      <button key={m} onClick={() => setSelectedMode(m)}
+                        className="flex-1 font-mono text-xs py-2 border transition-colors bg-c-bg border-c-border text-slate-400 hover:border-violet-500/50">
+                        {m === 'casual' ? 'CASUAL' : 'COMPETITIVE'}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="font-mono text-[10px] text-slate-600 mt-1">
+                    Casual — free to play · Competitive — lock tokens, winner takes all
+                  </p>
+                </Field>
+              </>
+            )}
+
+            {/* ── CASUAL CREATE ── */}
+            {phase === 'idle' && !isJoinMode && selectedMode === 'casual' && (
+              <>
+                <VisibilityField isPublic={isPublic} setIsPublic={setIsPublic} />
+                {!isPublic && <OpponentInput value={opponent} onChange={setOpponent} />}
+                <Cta onClick={() => { ensureWsConnected(); startCasual(playerId, gameSlug, isPublic, isPublic ? null : (opponent.trim() || null)) }}>FIND MATCH</Cta>
+              </>
+            )}
+
+            {/* ── CASUAL JOIN ── */}
+            {phase === 'idle' && isCasualJoin && (
               <>
                 <div className="flex flex-col gap-3">
-                  <Row label="AMOUNT" value={`${toDisplay(joinTarget.amount)} ${joinTarget.denom === 'uatom' ? 'ATOM' : 'USDC'}`} />
-                  <Row label="MATCH ID" value={joinTarget.matchId.slice(-12)} mono />
+                  <Row label="MATCH ID" value={joinTarget!.matchId.slice(-12)} mono />
+                </div>
+                <p className="font-mono text-xs text-slate-500">No bets — just play for fun.</p>
+                <Cta onClick={() => { ensureWsConnected(); joinCasual(playerId) }}>JOIN MATCH</Cta>
+              </>
+            )}
+
+            {/* ── COMPETITIVE JOIN ── */}
+            {phase === 'idle' && isJoinMode && !isCasualJoin && (
+              <>
+                <div className="flex flex-col gap-3">
+                  <Row label="AMOUNT" value={`${toDisplay(joinTarget!.amount)} ${joinTarget!.denom === 'uatom' ? 'ATOM' : 'USDC'}`} />
+                  <Row label="MATCH ID" value={joinTarget!.matchId.slice(-12)} mono />
                 </div>
                 <p className="font-mono text-xs text-slate-500">Locking the same amount to join. Winner takes the pot.</p>
                 {connected
@@ -82,8 +144,8 @@ export default function MatchGate({ gameSlug, onClose }: Props) {
               </>
             )}
 
-            {/* idle: create mode */}
-            {phase === 'idle' && !isJoinMode && (
+            {/* ── COMPETITIVE CREATE ── */}
+            {phase === 'idle' && !isJoinMode && selectedMode === 'competitive' && (
               <>
                 <Field label="TOKEN">
                   <div className="flex gap-2">
@@ -106,28 +168,8 @@ export default function MatchGate({ gameSlug, onClose }: Props) {
                   </div>
                 </Field>
 
-                <Field label="VISIBILITY">
-                  <div className="flex gap-2">
-                    {([true, false] as const).map((pub) => (
-                      <button key={String(pub)} onClick={() => setIsPublic(pub)}
-                        className={`flex-1 font-mono text-xs py-2 border transition-colors
-                          ${isPublic === pub ? 'bg-violet-700 border-violet-500 text-white' : 'bg-c-bg border-c-border text-slate-400 hover:border-violet-500/50'}`}>
-                        {pub ? 'PUBLIC' : 'PRIVATE'}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="font-mono text-[10px] text-slate-600 mt-1">
-                    {isPublic ? 'Listed in matchmaking — anyone can join' : 'Share a link to invite a specific player'}
-                  </p>
-                </Field>
-
-                {!isPublic && (
-                  <Field label="OPPONENT ADDRESS (optional)">
-                    <input type="text" placeholder="cosmos1... or leave blank for link-only"
-                      value={opponent} onChange={(e) => setOpponent(e.target.value)}
-                      className="w-full bg-c-bg border border-c-border font-mono text-xs text-slate-300 px-3 py-2 outline-none focus:border-violet-500 transition-colors placeholder:text-slate-700" />
-                  </Field>
-                )}
+                <VisibilityField isPublic={isPublic} setIsPublic={setIsPublic} />
+                {!isPublic && <OpponentInput value={opponent} onChange={setOpponent} />}
 
                 {connected
                   ? <Cta onClick={() => address && createBet(address, gameSlug, toUbase(amount), denom, isPublic, isPublic ? null : (opponent.trim() || null))}>LOCK FUNDS</Cta>
@@ -184,6 +226,35 @@ export default function MatchGate({ gameSlug, onClose }: Props) {
         </div>
       )}
     </div>
+  )
+}
+
+function VisibilityField({ isPublic, setIsPublic }: { isPublic: boolean; setIsPublic: (v: boolean) => void }) {
+  return (
+    <Field label="VISIBILITY">
+      <div className="flex gap-2">
+        {([true, false] as const).map((pub) => (
+          <button key={String(pub)} onClick={() => setIsPublic(pub)}
+            className={`flex-1 font-mono text-xs py-2 border transition-colors
+              ${isPublic === pub ? 'bg-violet-700 border-violet-500 text-white' : 'bg-c-bg border-c-border text-slate-400 hover:border-violet-500/50'}`}>
+            {pub ? 'PUBLIC' : 'PRIVATE'}
+          </button>
+        ))}
+      </div>
+      <p className="font-mono text-[10px] text-slate-600 mt-1">
+        {isPublic ? 'Listed in matchmaking — anyone can join' : 'Share a link to invite a specific player'}
+      </p>
+    </Field>
+  )
+}
+
+function OpponentInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <Field label="OPPONENT ADDRESS (optional)">
+      <input type="text" placeholder="cosmos1... or leave blank for link-only"
+        value={value} onChange={(e) => onChange(e.target.value)}
+        className="w-full bg-c-bg border border-c-border font-mono text-xs text-slate-300 px-3 py-2 outline-none focus:border-violet-500 transition-colors placeholder:text-slate-700" />
+    </Field>
   )
 }
 

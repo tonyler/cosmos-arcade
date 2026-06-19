@@ -1,3 +1,5 @@
+import pacmanThumb from '../assets/games/pacman.svg'
+
 export interface Game {
   slug: string
   title: string
@@ -14,6 +16,6 @@ export const GAMES: Game[] = [
     description: 'Most dots eaten in 90 seconds takes the wager. Ghosts are not your friends.',
     category: 'Arcade',
     players: '1–2P',
-    thumb: '/assets/games/pacman.jpg',
+    thumb: pacmanThumb,
   },
 ]

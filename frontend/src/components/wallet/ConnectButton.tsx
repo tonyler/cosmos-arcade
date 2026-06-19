@@ -23,7 +23,6 @@ function makeIdenticon(address: string): string {
   return canvas.toDataURL()
 }
 
-
 export default function ConnectButton() {
   const { connected, address, connect, disconnect } = useWalletStore()
 
@@ -31,23 +30,21 @@ export default function ConnectButton() {
     return (
       <button
         onClick={disconnect}
-        className="
-          flex items-center gap-2.5 px-4 py-2.5
+        className="flex items-center gap-1.5 md:gap-2.5 px-2 md:px-4 py-1.5 md:py-2.5
           bg-c-surface2 border border-c-borderhi
-          font-mono text-sm font-bold text-slate-300 uppercase tracking-wide
-          shadow-[0_3px_0_#08101e]
+          font-mono text-xs font-bold text-slate-300 uppercase tracking-wide
+          shadow-[0_2px_0_#08101e] md:shadow-[0_3px_0_#08101e]
           hover:border-violet-500/60 hover:bg-violet-900/20
-          active:translate-y-[3px] active:shadow-none
-          transition-all duration-75
-        "
+          active:translate-y-[2px] active:shadow-none
+          transition-all duration-75"
       >
         <img
           src={makeIdenticon(address)}
-          className="w-6 h-6 block"
+          className="w-5 h-5 md:w-6 md:h-6 block"
           style={{ imageRendering: 'pixelated' }}
           alt="avatar"
         />
-        <span className="text-slate-400 text-xs">{truncate(address)}</span>
+        <span className="hidden sm:block text-slate-400 text-xs">{truncate(address)}</span>
       </button>
     )
   }
@@ -55,18 +52,18 @@ export default function ConnectButton() {
   return (
     <button
       onClick={connect}
-      className="
-        px-6 py-3
+      className="px-3 py-2 md:px-6 md:py-3
         bg-violet-700 text-white
-        font-mono text-sm font-bold uppercase tracking-widest
-        shadow-[0_5px_0_#3b0f8a]
+        font-mono text-xs md:text-sm font-bold uppercase tracking-widest
+        shadow-[0_3px_0_#3b0f8a] md:shadow-[0_5px_0_#3b0f8a]
         hover:bg-violet-600
-        active:translate-y-[5px] active:shadow-none
+        active:translate-y-[3px] active:shadow-none
         transition-all duration-75
-        [clip-path:polygon(0_0,calc(100%-8px)_0,100%_8px,100%_100%,8px_100%,0_calc(100%-8px))]
-      "
+        [clip-path:polygon(0_0,calc(100%-6px)_0,100%_6px,100%_100%,6px_100%,0_calc(100%-6px))]
+        md:[clip-path:polygon(0_0,calc(100%-8px)_0,100%_8px,100%_100%,8px_100%,0_calc(100%-8px))]"
     >
-      Connect Wallet
+      <span className="sm:hidden">Connect</span>
+      <span className="hidden sm:inline">Connect Wallet</span>
     </button>
   )
 }

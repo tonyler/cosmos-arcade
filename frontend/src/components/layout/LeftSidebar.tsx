@@ -1,6 +1,6 @@
 export default function LeftSidebar() {
   return (
-    <aside className="w-56 min-w-56 flex flex-col bg-c-panel border-r border-c-border relative z-20">
+    <aside className="hidden md:flex w-56 min-w-56 flex-col bg-c-panel border-r border-c-border relative z-20">
       {/* Logo */}
       <div className="px-5 pt-7 pb-6 border-b border-c-border">
         <p className="font-px text-[11px] text-slate-100 leading-loose tracking-wide">

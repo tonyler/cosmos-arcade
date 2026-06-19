@@ -14,15 +14,19 @@ export type MatchPhase =
   | 'settling'    // on-chain settlement in progress
   | 'complete'    // match over
 
+export type GameMode = 'casual' | 'competitive'
+
 export interface JoinTarget {
   matchId: string
   gameSlug: string
   amount: string
   denom: Denom
+  isCasual?: boolean
 }
 
 interface MatchState {
   phase: MatchPhase
+  gameMode: GameMode | null
   matchId: string | null
   gameSlug: string | null
   amount: string | null
@@ -49,10 +53,15 @@ interface MatchState {
   setJoinTarget: (t: JoinTarget | null) => void
   createBet: (address: string, gameSlug: string, amount: string, denom: Denom, isPublic: boolean, opponent: string | null) => Promise<void>
   joinBet: (address: string) => Promise<void>
+  startCasual: (address: string, gameSlug: string, isPublic: boolean, opponent: string | null) => void
+  joinCasual: (address: string) => void
   markReady: () => void
   announceWinner: (winner: string) => void
   reset: () => void
 }
+
+const makeMatchId = (gameSlug: string) =>
+  `${gameSlug}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
 
 let countdownInterval: ReturnType<typeof setInterval> | null = null
 function clearCountdown() {
@@ -80,17 +89,21 @@ export const useMatchStore = create<MatchState>((set, get) => {
   ws.on('match:begin', (data: any) => {
     clearCountdown()
     const s = get()
-    // Server tells us who is p1/p2 — resolve our slot
     const mySlot: 1 | 2 = s.myAddress === data.p1 ? 1 : 2
     const opponentAddress = mySlot === 1 ? data.p2 : data.p1
     set({ phase: 'playing', countdown: 0, mySlot, p1Address: data.p1, p2Address: data.p2, opponentAddress })
   })
   ws.on('match:settling', () => set({ phase: 'settling' }))
   ws.on('match:settled', (data: any) => set({ phase: 'complete', winner: data.winner }))
+  ws.on('match:complete', (data: any) => {
+    const s = get()
+    if (s.phase !== 'complete') set({ phase: 'complete', winner: data.winner })
+  })
   ws.on('match:error', (data: any) => set({ phase: 'idle', error: data.message }))
 
   const base = {
     phase: 'idle' as MatchPhase,
+    gameMode: null as GameMode | null,
     matchId: null, gameSlug: null, amount: null, denom: null,
     isPublic: true, myAddress: null, mySlot: null,
     p1Address: null, p2Address: null, opponentAddress: null,
@@ -117,8 +130,8 @@ export const useMatchStore = create<MatchState>((set, get) => {
     setJoinTarget: (t) => set({ joinTarget: t }),
 
     createBet: async (address, gameSlug, amount, denom, isPublic, opponent) => {
-      const matchId = `${gameSlug}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
-      set({ phase: 'creating', matchId, gameSlug, amount, denom, isPublic, myAddress: address, mySlot: 1, p1Address: address, error: null })
+      const matchId = makeMatchId(gameSlug)
+      set({ phase: 'creating', gameMode: 'competitive', matchId, gameSlug, amount, denom, isPublic, myAddress: address, mySlot: 1, p1Address: address, error: null })
       try {
         await lockFunds(address, { matchId, opponent, amount, denom })
         const shareLink = isPublic ? null
@@ -126,22 +139,36 @@ export const useMatchStore = create<MatchState>((set, get) => {
         set({ phase: 'waiting', shareLink })
         ws.send('match:create', { matchId, gameSlug, amount, denom, isPublic, opponent, txHash: '' })
       } catch (e: any) {
-        set({ phase: 'idle', error: e.message ?? 'Transaction failed' })
+        set({ phase: 'idle', gameMode: null, error: e.message ?? 'Transaction failed' })
       }
     },
 
     joinBet: async (address) => {
       const { joinTarget } = get()
       if (!joinTarget) return
-      set({ phase: 'joining', myAddress: address, mySlot: 2, p2Address: address, matchId: joinTarget.matchId, gameSlug: joinTarget.gameSlug, amount: joinTarget.amount, denom: joinTarget.denom, error: null })
+      set({ phase: 'joining', gameMode: 'competitive', myAddress: address, mySlot: 2, p2Address: address, matchId: joinTarget.matchId, gameSlug: joinTarget.gameSlug, amount: joinTarget.amount, denom: joinTarget.denom, error: null })
       try {
         await acceptMatch(address, joinTarget.matchId, joinTarget.amount, joinTarget.denom)
         set({ phase: 'waiting' })
         ws.send('match:join', { matchId: joinTarget.matchId, txHash: '' })
-        // phase → 'ready' when server sends match:opponent_joined
       } catch (e: any) {
-        set({ phase: 'idle', error: e.message ?? 'Transaction failed' })
+        set({ phase: 'idle', gameMode: null, error: e.message ?? 'Transaction failed' })
       }
+    },
+
+    startCasual: (address, gameSlug, isPublic, opponent) => {
+      const matchId = makeMatchId(gameSlug)
+      const shareLink = isPublic ? null
+        : `${window.location.origin}/?join=${matchId}&game=${gameSlug}&casual=true`
+      set({ phase: 'waiting', gameMode: 'casual', matchId, gameSlug, isPublic, myAddress: address, mySlot: 1, p1Address: address, shareLink, error: null })
+      ws.send('match:casual_create', { matchId, gameSlug, isPublic, opponent: isPublic ? null : (opponent || null) })
+    },
+
+    joinCasual: (address) => {
+      const { joinTarget } = get()
+      if (!joinTarget) return
+      set({ phase: 'waiting', gameMode: 'casual', myAddress: address, mySlot: 2, p2Address: address, matchId: joinTarget.matchId, gameSlug: joinTarget.gameSlug, error: null })
+      ws.send('match:casual_join', { matchId: joinTarget.matchId })
     },
 
     markReady: () => {
@@ -152,10 +179,14 @@ export const useMatchStore = create<MatchState>((set, get) => {
     },
 
     announceWinner: (winner) => {
-      const { matchId } = get()
+      const { matchId, gameMode } = get()
       if (!matchId) return
-      set({ phase: 'settling' })
       ws.send('game:over', { matchId, winner })
+      if (gameMode === 'casual') {
+        set({ phase: 'complete', winner })
+      } else {
+        set({ phase: 'settling' })
+      }
     },
 
     reset: () => {

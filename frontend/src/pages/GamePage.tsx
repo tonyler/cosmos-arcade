@@ -23,7 +23,7 @@ export default function GamePage({ slug }: Props) {
 
       {/* Header — only visible once playing */}
       {phase === 'playing' && (
-        <div className="w-full max-w-5xl px-6 pt-5 pb-2 flex items-center gap-3">
+        <div className="w-full max-w-5xl px-4 md:px-6 pt-4 md:pt-5 pb-2 flex items-center gap-3">
           <button onClick={goBack}
             className="font-px text-[8px] text-slate-400 hover:text-violet-400 tracking-widest transition-colors flex items-center gap-2">
             ← BACK
@@ -38,7 +38,7 @@ export default function GamePage({ slug }: Props) {
       )}
 
       {/* Game area */}
-      <div className="relative w-full max-w-5xl px-6 pb-10">
+      <div className="relative w-full max-w-5xl px-2 md:px-6 pb-6 md:pb-10 overflow-x-auto">
         {slug === 'pacman' ? (
           <PacManGame matchCtx={ctx ?? undefined} onWinner={announceWinner} />
         ) : (
@@ -54,10 +54,10 @@ export default function GamePage({ slug }: Props) {
 
 function ComingSoon({ game }: { game: ReturnType<typeof GAMES.find> }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-6 py-32">
+    <div className="flex flex-col items-center justify-center gap-6 py-24 md:py-32">
       <div className="text-6xl opacity-20">🕹</div>
       <div className="font-px text-[10px] text-slate-400 tracking-widest">COMING SOON</div>
-      {game && <p className="text-sm text-slate-500 text-center max-w-xs">{game.description}</p>}
+      {game && <p className="text-sm text-slate-500 text-center max-w-xs px-4">{game.description}</p>}
     </div>
   )
 }

@@ -19,3 +19,14 @@ export interface BetJoin {
   matchId: string
   txHash: string
 }
+
+export interface CasualCreate {
+  matchId: string
+  gameSlug: string
+  isPublic: boolean
+  opponent: string | null
+}
+
+export interface CasualJoin {
+  matchId: string
+}

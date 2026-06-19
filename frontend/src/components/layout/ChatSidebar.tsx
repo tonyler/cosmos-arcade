@@ -16,14 +16,12 @@ export default function ChatSidebar() {
   const listRef     = useRef<HTMLDivElement>(null)
   const dmListRef   = useRef<HTMLDivElement>(null)
 
-  // 1s ticker for cooldown display
   const [now, setNow] = useState(Date.now)
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(id)
   }, [])
 
-  // Auto-scroll
   useEffect(() => {
     if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight
   }, [messages])
@@ -61,15 +59,25 @@ export default function ChatSidebar() {
 
   return (
     <aside
-      className="relative flex flex-col h-full bg-c-panel border-l border-c-border z-20 overflow-hidden transition-all duration-300 ease-out"
-      style={{ width: open ? '300px' : '0px', minWidth: open ? '300px' : '0px', borderColor: open ? undefined : 'transparent' }}
+      className={[
+        // Base
+        'flex flex-col bg-c-panel border-c-border overflow-hidden z-50',
+        // Mobile: fixed below navbar and above bottom nav, slides in from right
+        'fixed top-[56px] bottom-16 inset-x-0 w-full border-0',
+        'transition-transform duration-300 ease-out',
+        open ? 'translate-x-0' : 'translate-x-full',
+        // Desktop: relative sidebar with width animation
+        'md:relative md:inset-auto md:z-20 md:h-full md:border-l',
+        'md:translate-x-0 md:transition-all md:duration-300 md:ease-out',
+        open ? 'md:w-[300px] md:min-w-[300px]' : 'md:w-0 md:min-w-0 md:border-transparent',
+      ].join(' ')}
     >
-      {/* Collapse toggle */}
+      {/* Desktop collapse toggle */}
       <button
         onClick={toggleOpen}
-        className="absolute -left-[17px] top-1/2 -translate-y-1/2 z-30
+        className="hidden md:flex absolute -left-[17px] top-1/2 -translate-y-1/2 z-30
           w-[17px] h-14 bg-c-surface border border-r-0 border-c-borderhi
-          flex items-center justify-center text-[9px] text-slate-600
+          items-center justify-center text-[9px] text-slate-600
           hover:text-slate-300 hover:bg-violet-900/20 hover:border-violet-500/50
           transition-colors duration-100"
         title={open ? 'Close chat' : 'Open chat'}
@@ -79,9 +87,19 @@ export default function ChatSidebar() {
       </button>
 
       <div
-        className="flex flex-col h-full transition-opacity duration-200"
-        style={{ opacity: open ? 1 : 0, pointerEvents: open ? 'auto' : 'none' }}
+        className={`flex flex-col h-full transition-opacity duration-200 ${open ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
       >
+        {/* Mobile header with close button */}
+        <div className="md:hidden flex items-center justify-between px-4 py-3 border-b border-c-border flex-shrink-0">
+          <span className="font-px text-[9px] text-slate-200 tracking-widest">CHAT</span>
+          <button
+            onClick={toggleOpen}
+            className="text-slate-500 hover:text-slate-300 text-xl leading-none px-2"
+          >
+            ×
+          </button>
+        </div>
+
         {!connected ? (
           <div className="flex-1 flex items-center justify-center px-6">
             <p className="font-mono text-[10px] text-slate-600 text-center leading-relaxed">

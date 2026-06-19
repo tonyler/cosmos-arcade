@@ -38,6 +38,15 @@ class WSClient {
     else this.queue.push(msg)
   }
 
+  reconnect(address: string) {
+    if (this.ws) {
+      this.ws.onclose = null
+      this.ws.close()
+    }
+    this._connected = false
+    this.connect(address)
+  }
+
   on(type: string, handler: Handler) {
     if (!this.handlers.has(type)) this.handlers.set(type, new Set())
     this.handlers.get(type)!.add(handler)

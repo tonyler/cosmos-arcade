@@ -126,7 +126,7 @@ export const useChatStore = create<ChatState>((set, get) => {
   })
 
   return {
-    open: true,
+    open: false,
     activeTab: 'general',
     messages: [],
     onlineUsers: [],

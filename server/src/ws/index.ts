@@ -8,6 +8,7 @@ import {
   handleChallenge, handleAccept, handleReject,
   handleCreateBet, handleJoinBet, handlePlayerReady,
   handleGameInput, handleGameOver, handleGameEvent,
+  handleCreateCasual, handleJoinCasual,
 } from './handlers/match'
 import { subscribeAdmin, unsubscribeAdmin } from './telemetry'
 
@@ -47,8 +48,10 @@ export function attachWS(server: Server) {
           case 'match:challenge': await handleChallenge(address, data); break
           case 'match:accept':    await handleAccept(address, data.challenger); break
           case 'match:reject':    await handleReject(address, data.challenger); break
-          case 'match:create':    await handleCreateBet(address, data); break
-          case 'match:join':      await handleJoinBet(address, data); break
+          case 'match:create':         await handleCreateBet(address, data); break
+          case 'match:join':           await handleJoinBet(address, data); break
+          case 'match:casual_create':  await handleCreateCasual(address, data); break
+          case 'match:casual_join':    await handleJoinCasual(address, data); break
           case 'match:ready':     await handlePlayerReady(address, data.matchId); break
           case 'match:event':     await handleGameEvent(address, data.matchId, data); break
           // Hot path — sync relay, no await needed

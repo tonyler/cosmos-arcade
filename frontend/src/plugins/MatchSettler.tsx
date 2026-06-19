@@ -1,18 +1,19 @@
 import { useMatchStore } from '../store/matchStore'
-import { truncate, toDisplay } from '../lib/format'
+import { truncate, toDisplay, DENOM_LABEL } from '../lib/format'
 
 export default function MatchSettler() {
-  const { phase, winner, myAddress, amount, denom, reset } = useMatchStore()
+  const { phase, gameMode, winner, myAddress, amount, denom, reset } = useMatchStore()
 
   if (phase !== 'settling' && phase !== 'complete') return null
 
+  const isCasual = gameMode === 'casual'
   const iWon = winner === myAddress
   const payout = amount ? toDisplay(String(Number(amount) * 2)) : '?'
-  const symbol = denom === 'uatom' ? 'ATOM' : 'USDC'
+  const symbol = denom ? (DENOM_LABEL[denom] ?? denom) : ''
 
   return (
     <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/85">
-      {phase === 'settling' ? (
+      {phase === 'settling' && !isCasual ? (
         <div className="flex items-center gap-3">
           <span className="w-2 h-2 bg-violet-400 rounded-full animate-pulse" />
           <span className="font-px text-[9px] text-slate-400 tracking-widest">SETTLING ON-CHAIN...</span>
@@ -22,11 +23,14 @@ export default function MatchSettler() {
           <div className="font-px text-[14px] tracking-widest" style={{ color: iWon ? '#ffe000' : '#ef4444' }}>
             {iWon ? 'YOU WIN!' : 'YOU LOSE'}
           </div>
-          {iWon && amount && (
+          {iWon && !isCasual && amount && (
             <div className="flex flex-col items-center gap-1">
               <span className="font-mono text-xs text-slate-500 uppercase tracking-wider">Payout</span>
               <span className="font-px text-[11px] text-violet-300">{payout} {symbol}</span>
             </div>
+          )}
+          {isCasual && (
+            <div className="font-mono text-xs text-slate-500 tracking-wider">GG!</div>
           )}
           {winner && (
             <div className="flex flex-col items-center gap-1">

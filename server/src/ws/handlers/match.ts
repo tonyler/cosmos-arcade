@@ -4,9 +4,14 @@ import { settleMatch } from '../../chain/settlement'
 import { telem } from '../telemetry'
 import { PacManMatch } from '../../games/pacman/PacManMatch'
 import type { BaseMatch } from '../../games/_base/BaseMatch'
-import type { Challenge, BetCreate, BetJoin } from './types'
+import type { Challenge, BetCreate, BetJoin, CasualCreate, CasualJoin } from './types'
 
 const activeMatches = new Map<string, BaseMatch>()
+
+function cleanupMatch(matchId: string) {
+  activeMatches.delete(matchId)
+  redis.del(`match:bet:${matchId}`).catch(() => {})
+}
 
 function createMatchInstance(gameSlug: string, matchId: string, p1: string, p2: string): BaseMatch {
   if (gameSlug === 'pacman') return new PacManMatch(matchId, p1, p2)
@@ -22,8 +27,16 @@ function attachSettlement(match: BaseMatch, matchId: string, creator: string, op
     send(creator, 'match:settled', { matchId, winner, txHash })
     send(opponent, 'match:settled', { matchId, winner, txHash })
     telem('match:settled', { matchId, winner, txHash, amount, denom, payout: String(BigInt(amount) * 2n) })
-    activeMatches.delete(matchId)
-    redis.del(`match:bet:${matchId}`).catch(() => {})
+    cleanupMatch(matchId)
+  }
+}
+
+function attachCasualComplete(match: BaseMatch, matchId: string, creator: string, opponent: string) {
+  match.onComplete = async (winner) => {
+    send(creator, 'match:complete', { matchId, winner })
+    send(opponent, 'match:complete', { matchId, winner })
+    telem('match:casual_complete', { matchId, winner, p1: creator, p2: opponent })
+    cleanupMatch(matchId)
   }
 }
 
@@ -78,7 +91,10 @@ export async function handleJoinBet(joiner: string, data: BetJoin) {
   bet.opponent = joiner
   bet.status = 'joined'
   await redis.set(`match:bet:${data.matchId}`, JSON.stringify(bet), 'EX', 3600)
-  if (bet.isPublic) redis.zrem('match:public', data.matchId).catch(() => {})
+  if (bet.isPublic) {
+    redis.zrem('match:public', data.matchId).catch(() => {})
+    broadcast('lobby:match_taken', { matchId: data.matchId })
+  }
   send(bet.creator, 'match:opponent_joined', { matchId: data.matchId, opponent: joiner })
   send(joiner, 'match:opponent_joined', { matchId: data.matchId, opponent: bet.creator })
   telem('match:join', { matchId: data.matchId, joiner, creator: bet.creator, amount: bet.amount, denom: bet.denom })
@@ -99,7 +115,11 @@ export async function handlePlayerReady(address: string, matchId: string) {
     send(bet.opponent, 'match:countdown', { matchId, seconds: 15 })
     telem('match:countdown', { matchId, p1: bet.creator, p2: bet.opponent, seconds: 15 })
     const match = createMatchInstance(bet.gameSlug, matchId, bet.creator, bet.opponent)
-    attachSettlement(match, matchId, bet.creator, bet.opponent, bet.amount, bet.denom)
+    if (bet.isCasual) {
+      attachCasualComplete(match, matchId, bet.creator, bet.opponent)
+    } else {
+      attachSettlement(match, matchId, bet.creator, bet.opponent, bet.amount, bet.denom)
+    }
     activeMatches.set(matchId, match)
     setTimeout(() => {
       send(bet.creator, 'match:begin', { matchId, p1: bet.creator, p2: bet.opponent })
@@ -107,6 +127,40 @@ export async function handlePlayerReady(address: string, matchId: string) {
       telem('match:begin', { matchId, p1: bet.creator, p2: bet.opponent, gameSlug: bet.gameSlug, amount: bet.amount, denom: bet.denom })
     }, 15_000)
   }
+}
+
+// ── Casual (no-bet) flow ──────────────────────────────────────────────────────
+
+export async function handleCreateCasual(creator: string, data: CasualCreate) {
+  const bet = { ...data, creator, isCasual: true, status: 'waiting', createdAt: Date.now() }
+  await redis.set(`match:bet:${data.matchId}`, JSON.stringify(bet), 'EX', 3600)
+  if (data.isPublic) {
+    await redis.zadd('match:public', Date.now(), data.matchId)
+    broadcast('lobby:open_match', { matchId: data.matchId, gameSlug: data.gameSlug, isCasual: true }, creator)
+  }
+  const sharePath = data.isPublic
+    ? null
+    : `/?join=${data.matchId}&game=${data.gameSlug}&casual=true`
+  send(creator, 'match:waiting', { matchId: data.matchId, sharePath })
+  telem('match:casual_create', { matchId: data.matchId, creator, gameSlug: data.gameSlug, isPublic: data.isPublic })
+}
+
+export async function handleJoinCasual(joiner: string, data: CasualJoin) {
+  const raw = await redis.get(`match:bet:${data.matchId}`)
+  if (!raw) { send(joiner, 'match:error', { message: 'Match not found or expired' }); return }
+  const bet = JSON.parse(raw)
+  if (bet.status !== 'waiting') { send(joiner, 'match:error', { message: 'Match already full' }); return }
+  if (joiner === bet.creator) { send(joiner, 'match:error', { message: 'Cannot join your own match' }); return }
+  bet.opponent = joiner
+  bet.status = 'joined'
+  await redis.set(`match:bet:${data.matchId}`, JSON.stringify(bet), 'EX', 3600)
+  if (bet.isPublic) {
+    redis.zrem('match:public', data.matchId).catch(() => {})
+    broadcast('lobby:match_taken', { matchId: data.matchId })
+  }
+  send(bet.creator, 'match:opponent_joined', { matchId: data.matchId, opponent: joiner })
+  send(joiner, 'match:opponent_joined', { matchId: data.matchId, opponent: bet.creator })
+  telem('match:casual_join', { matchId: data.matchId, joiner, creator: bet.creator })
 }
 
 // ── Real-time input relay (hot path — sync, no Redis) ─────────────────────────

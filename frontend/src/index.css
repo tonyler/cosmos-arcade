@@ -5,7 +5,18 @@
 @layer base {
   html, body, #root {
     height: 100%;
-    overflow: hidden;
+  }
+  /* Desktop: lock body scroll — content scrolls within the app shell */
+  @media (min-width: 768px) {
+    html, body, #root {
+      overflow: hidden;
+    }
+  }
+  /* Mobile: allow normal viewport scroll */
+  @media (max-width: 767px) {
+    body {
+      overflow-x: hidden;
+    }
   }
   body {
     font-family: 'DM Sans', sans-serif;
@@ -18,4 +29,15 @@
   *::-webkit-scrollbar { width: 4px; height: 4px; }
   *::-webkit-scrollbar-thumb { background: #223050; border-radius: 0; }
   *::-webkit-scrollbar-track { background: transparent; }
+}
+
+/* Desktop-only zoom — keeps mobile at native scale */
+.desktop-zoom {
+  height: 100vh;
+}
+@media (min-width: 768px) {
+  .desktop-zoom {
+    zoom: 1.1;
+    height: calc(100vh / 1.1);
+  }
 }
