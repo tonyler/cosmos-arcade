@@ -7,7 +7,7 @@ export function useUsername() {
   async function registerUsername(name: string) {
     if (!address) throw new Error('Wallet not connected')
     const sig = await signArbitrary(address, `register:${name}`)
-    const res = await fetch('/api/username', {
+    const res = await fetch(import.meta.env.BASE_URL + 'api/username', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ address, username: name, sig }),

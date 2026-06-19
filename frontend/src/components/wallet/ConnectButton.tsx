@@ -24,7 +24,7 @@ function makeIdenticon(address: string): string {
 }
 
 export default function ConnectButton() {
-  const { connected, address, connect, disconnect } = useWalletStore()
+  const { connected, address, username, connect, disconnect } = useWalletStore()
 
   if (connected && address) {
     return (
@@ -44,7 +44,7 @@ export default function ConnectButton() {
           style={{ imageRendering: 'pixelated' }}
           alt="avatar"
         />
-        <span className="hidden sm:block text-slate-400 text-xs">{truncate(address)}</span>
+        <span className="hidden sm:block text-slate-400 text-xs">{username ?? truncate(address)}</span>
       </button>
     )
   }

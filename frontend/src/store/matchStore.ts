@@ -135,7 +135,7 @@ export const useMatchStore = create<MatchState>((set, get) => {
       try {
         await lockFunds(address, { matchId, opponent, amount, denom })
         const shareLink = isPublic ? null
-          : `${window.location.origin}/?join=${matchId}&game=${gameSlug}&amount=${amount}&denom=${denom}`
+          : `${window.location.origin}${import.meta.env.BASE_URL}?join=${matchId}&game=${gameSlug}&amount=${amount}&denom=${denom}`
         set({ phase: 'waiting', shareLink })
         ws.send('match:create', { matchId, gameSlug, amount, denom, isPublic, opponent, txHash: '' })
       } catch (e: any) {
@@ -159,7 +159,7 @@ export const useMatchStore = create<MatchState>((set, get) => {
     startCasual: (address, gameSlug, isPublic, opponent) => {
       const matchId = makeMatchId(gameSlug)
       const shareLink = isPublic ? null
-        : `${window.location.origin}/?join=${matchId}&game=${gameSlug}&casual=true`
+        : `${window.location.origin}${import.meta.env.BASE_URL}?join=${matchId}&game=${gameSlug}&casual=true`
       set({ phase: 'waiting', gameMode: 'casual', matchId, gameSlug, isPublic, myAddress: address, mySlot: 1, p1Address: address, shareLink, error: null })
       ws.send('match:casual_create', { matchId, gameSlug, isPublic, opponent: isPublic ? null : (opponent || null) })
     },

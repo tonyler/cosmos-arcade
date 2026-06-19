@@ -1,4 +1,6 @@
-const WS_URL = import.meta.env.VITE_WS_URL ?? 'ws://localhost:4000/ws'
+const _proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+const _base = import.meta.env.BASE_URL.replace(/\/$/, '')
+const WS_URL = import.meta.env.VITE_WS_URL ?? `${_proto}//${window.location.host}${_base}/ws`
 
 type Handler = (data: unknown) => void
 

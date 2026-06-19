@@ -327,9 +327,22 @@ function movePlayer(p: Player, grid: number[][], dt: number, other: Player): Pla
   const pixels = SPEED_PX_PER_MS * dt * TILE_F
   let { px, py, col, row, dir, nextDir } = p
 
-  // Try to turn
+  const centerX = col * TILE_F + TILE_F / 2
+  const centerY = row * TILE_F + TILE_F / 2
+
+  // Try to turn — only when the sprite is close enough to the tile center on
+  // the cross-axis, then snap that axis so the sprite is never displaced into
+  // an adjacent wall after the direction change.
   if (nextDir !== dir && canMove(grid, col, row, nextDir)) {
-    dir = nextDir
+    const toVert = DY[nextDir] !== 0
+    const aligned = toVert
+      ? Math.abs(px - centerX) <= pixels + 1   // turning to vertical: check H offset
+      : Math.abs(py - centerY) <= pixels + 1   // turning to horizontal: check V offset
+    if (aligned) {
+      if (toVert) px = centerX   // lock horizontal axis before moving vertically
+      else        py = centerY   // lock vertical axis before moving horizontally
+      dir = nextDir
+    }
   }
 
   // Treat other player as a wall — check before any pixel movement to avoid jitter
@@ -360,8 +373,9 @@ function movePlayer(p: Player, grid: number[][], dt: number, other: Player): Pla
       py = tcy
     }
   } else {
-    px = col * TILE_F + TILE_F / 2
-    py = row * TILE_F + TILE_F / 2
+    // Wall ahead — clamp to tile center so the sprite never overlaps a wall
+    px = centerX
+    py = centerY
   }
 
   return { ...p, px, py, col, row, dir }
@@ -406,61 +420,76 @@ function collectDots(s: GameState): { state: GameState; pelletEaten: boolean } {
 }
 
 // ── Ghost movement ────────────────────────────────────────────────────────
+// Ghosts move in their committed `dir` and only pick a new direction when they
+// reach the next tile centre. This prevents mid-tile direction changes that
+// cause sprites to appear displaced into walls.
 function moveGhost(g: Ghost, grid: number[][], p1: Player, p2: Player, dt: number): Ghost {
   const speed = g.mode === 'frightened' ? FRIGHTENED_SPEED : GHOST_SPEED
   const pixels = speed * dt * TILE_F
 
   let { px, py, col, row, dir } = g
 
-  // Get target
+  // Resolve chase/scatter target (used when we pick a new dir at tile centre)
   let targetC: number, targetR: number
   if (g.mode === 'scatter') {
     ;[targetC, targetR] = g.scatterTarget
   } else if (g.mode === 'eaten') {
-    ;[targetC, targetR] = [14, 11]  // ghost house entrance
+    ;[targetC, targetR] = [14, 11]
   } else {
-    // Chase nearest alive player
     const d1 = p1.alive ? dist(g.col, g.row, p1.col, p1.row) : Infinity
     const d2 = p2.alive ? dist(g.col, g.row, p2.col, p2.row) : Infinity
     const target = d1 <= d2 ? p1 : p2
     targetC = target.col; targetR = target.row
   }
 
-  const nextD = g.mode === 'frightened'
-    ? ghostFrightenedDir(g, grid)
-    : ghostNextDir(g, grid, targetC, targetR)
+  // If the committed direction is blocked from the current tile (e.g. just
+  // spawned facing a wall), pick immediately from the tile centre.
+  if (!canMove(grid, col, row, dir) && g.mode !== 'eaten') {
+    px = col * TILE_F + TILE_F / 2
+    py = row * TILE_F + TILE_F / 2
+    dir = g.mode === 'frightened'
+      ? ghostFrightenedDir({ ...g, col, row, dir }, grid)
+      : ghostNextDir({ ...g, col, row, dir }, grid, targetC, targetR)
+  }
 
-  px += DX[nextD] * pixels
-  py += DY[nextD] * pixels
+  // Move in committed direction
+  px += DX[dir] * pixels
+  py += DY[dir] * pixels
 
   // Tunnel wrap
   if (px < 0) px += COLS * TILE_F
   if (px >= COLS * TILE_F) px -= COLS * TILE_F
 
-  const tcx = (col + DX[nextD] + COLS) % COLS * TILE_F + TILE_F / 2
-  const tcy = (row + DY[nextD]) * TILE_F + TILE_F / 2
+  const nextCol = (col + DX[dir] + COLS) % COLS
+  const nextRow = Math.max(0, Math.min(ROWS - 1, row + DY[dir]))
+  const tcx = nextCol * TILE_F + TILE_F / 2
+  const tcy = nextRow * TILE_F + TILE_F / 2
 
-  const crossedX = DX[nextD] !== 0 && (
-    (DX[nextD] > 0 && px >= tcx) || (DX[nextD] < 0 && px <= tcx)
+  const crossedX = DX[dir] !== 0 && (
+    (DX[dir] > 0 && px >= tcx) || (DX[dir] < 0 && px <= tcx)
   )
-  const crossedY = DY[nextD] !== 0 && (
-    (DY[nextD] > 0 && py >= tcy) || (DY[nextD] < 0 && py <= tcy)
+  const crossedY = DY[dir] !== 0 && (
+    (DY[dir] > 0 && py >= tcy) || (DY[dir] < 0 && py <= tcy)
   )
+
+  let mode = g.mode
 
   if (crossedX || crossedY) {
-    col = (col + DX[nextD] + COLS) % COLS
-    row = row + DY[nextD]
-    if (row < 0) row = 0
-    if (row >= ROWS) row = ROWS - 1
+    // Snap to new tile centre
+    col = nextCol
+    row = nextRow
     px = col * TILE_F + TILE_F / 2
     py = row * TILE_F + TILE_F / 2
-    dir = nextD
-  }
 
-  // Arrive at ghost house when eaten
-  let mode = g.mode
-  if (g.mode === 'eaten' && col === 14 && row === 11) {
-    mode = 'scatter'
+    // Check ghost-house arrival
+    if (g.mode === 'eaten' && col === 14 && row === 11) {
+      mode = 'scatter'
+    }
+
+    // Pick the next direction from the new tile centre
+    dir = mode === 'frightened'
+      ? ghostFrightenedDir({ ...g, col, row, dir, mode }, grid)
+      : ghostNextDir({ ...g, col, row, dir, mode }, grid, targetC, targetR)
   }
 
   return { ...g, px, py, col, row, dir, mode }

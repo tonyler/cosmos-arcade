@@ -6,7 +6,22 @@ import type { MatchContext } from '../../plugins/types'
 
 const W = COLS * TILE  // 448
 const H = ROWS * TILE  // 496
-const SCALE = 1.5
+const MAX_SCALE = 1.5
+
+function useCanvasScale() {
+  const [scale, setScale] = useState(MAX_SCALE)
+  useEffect(() => {
+    function compute() {
+      const availW = window.innerWidth - 16
+      const availH = window.innerHeight - 140  // HUD ~80px + controls ~40px + padding
+      setScale(Math.min(MAX_SCALE, availW / W, availH / H))
+    }
+    compute()
+    window.addEventListener('resize', compute)
+    return () => window.removeEventListener('resize', compute)
+  }, [])
+  return scale
+}
 
 interface Props {
   matchCtx?: MatchContext
@@ -17,30 +32,25 @@ export default function PacManGame({ matchCtx, onWinner }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const stateRef = useRef<GameState>(initGame())
   const inputRef = useRef(createInputHandler())
-  // Separate buffer for WS-injected opponent inputs to avoid stomping on local keys
   const wsInputRef = useRef<{ p1Dir: Dir | null; p2Dir: Dir | null }>({ p1Dir: null, p2Dir: null })
   const rafRef = useRef<number>(0)
   const lastRef = useRef<number>(0)
   const winnerSentRef = useRef(false)
   const [displayState, setDisplayState] = useState(stateRef.current)
+  const [restartKey, setRestartKey] = useState(0)
+  const scale = useCanvasScale()
 
-  const restart = () => {
-    stateRef.current = initGame()
-    winnerSentRef.current = false
-    setDisplayState(stateRef.current)
-  }
+  const restart = () => setRestartKey((k) => k + 1)
 
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')!
     const detach = inputRef.current.attach(window)
-    // Reset game state when a new match begins (or on first mount for local play)
     stateRef.current = initGame()
     winnerSentRef.current = false
     wsInputRef.current = { p1Dir: null, p2Dir: null }
 
-    // Receive opponent's inputs over WS in online mode
     let offWs: (() => void) | undefined
     if (matchCtx) {
       offWs = ws.on('game:input', (data: any) => {
@@ -50,6 +60,33 @@ export default function PacManGame({ matchCtx, onWinner }: Props) {
       })
     }
 
+    // ── Swipe controls ──────────────────────────────────────────────────────
+    let touchStartX = 0
+    let touchStartY = 0
+    const onTouchStart = (e: TouchEvent) => {
+      e.preventDefault()
+      touchStartX = e.changedTouches[0].clientX
+      touchStartY = e.changedTouches[0].clientY
+    }
+    const onTouchEnd = (e: TouchEvent) => {
+      e.preventDefault()
+      const dx = e.changedTouches[0].clientX - touchStartX
+      const dy = e.changedTouches[0].clientY - touchStartY
+      if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return  // tap — ignore
+      let dir: Dir
+      if (Math.abs(dx) > Math.abs(dy)) {
+        dir = dx > 0 ? 1 : 3  // RIGHT : LEFT
+      } else {
+        dir = dy > 0 ? 2 : 0  // DOWN : UP
+      }
+      const useP2 = matchCtx ? matchCtx.mySlot === 2 : false
+      if (useP2) inputRef.current.state.p2Dir = dir
+      else inputRef.current.state.p1Dir = dir
+    }
+    canvas.addEventListener('touchstart', onTouchStart, { passive: false })
+    canvas.addEventListener('touchend', onTouchEnd, { passive: false })
+
+    // ── Game loop ────────────────────────────────────────────────────────────
     const loop = (ts: number) => {
       const dt = Math.min(ts - (lastRef.current || ts), 50)
       lastRef.current = ts
@@ -61,7 +98,6 @@ export default function PacManGame({ matchCtx, onWinner }: Props) {
       let p2Dir: Dir | null
 
       if (matchCtx) {
-        // My slot uses keyboard; opponent's slot uses WS
         if (matchCtx.mySlot === 1) {
           if (local.p1Dir !== null) ws.send('game:input', { matchId: matchCtx.matchId, slot: 1, dir: local.p1Dir })
           p1Dir = local.p1Dir
@@ -78,7 +114,6 @@ export default function PacManGame({ matchCtx, onWinner }: Props) {
 
       stateRef.current = update(stateRef.current, dt, { p1Dir, p2Dir })
 
-      // Clear all after consumed
       local.p1Dir = null
       local.p2Dir = null
       wsIn.p1Dir = null
@@ -86,7 +121,6 @@ export default function PacManGame({ matchCtx, onWinner }: Props) {
 
       render(ctx, stateRef.current)
 
-      // Announce winner in online mode
       if (matchCtx && stateRef.current.phase === 'gameOver' && !winnerSentRef.current) {
         winnerSentRef.current = true
         const addr = stateRef.current.winner === 1 ? matchCtx.p1Address : matchCtx.p2Address
@@ -107,19 +141,26 @@ export default function PacManGame({ matchCtx, onWinner }: Props) {
     }
 
     rafRef.current = requestAnimationFrame(loop)
-    return () => { cancelAnimationFrame(rafRef.current); detach(); offWs?.() }
+    return () => {
+      cancelAnimationFrame(rafRef.current)
+      detach()
+      offWs?.()
+      canvas.removeEventListener('touchstart', onTouchStart)
+      canvas.removeEventListener('touchend', onTouchEnd)
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [matchCtx?.matchId])
+  }, [matchCtx?.matchId, restartKey])
 
   const { p1, p2, phase, winner, level } = displayState
+  const isMobile = scale < MAX_SCALE
 
-  const p1Label = matchCtx ? (matchCtx.mySlot === 1 ? 'YOU ↑↓←→' : 'OPPONENT') : 'P1 ↑↓←→'
-  const p2Label = matchCtx ? (matchCtx.mySlot === 2 ? 'YOU WASD' : 'OPPONENT') : 'P2 WASD'
+  const p1Label = matchCtx ? (matchCtx.mySlot === 1 ? 'YOU' : 'OPPONENT') : 'P1'
+  const p2Label = matchCtx ? (matchCtx.mySlot === 2 ? 'YOU' : 'OPPONENT') : 'P2'
 
   return (
-    <div className="flex flex-col items-center gap-6 py-6">
+    <div className="flex flex-col items-center gap-3 py-3 md:gap-6 md:py-6">
       {/* HUD */}
-      <div className="flex items-start justify-between w-full max-w-lg px-2">
+      <div className="flex items-start justify-between w-full px-2" style={{ maxWidth: W * scale }}>
         <PlayerHUD label={p1Label} score={p1.score} color="#ffe000" powered={p1.powered} alive={p1.alive} />
         <div className="flex flex-col items-center gap-1">
           <span className="font-px text-[7px] text-slate-500 tracking-widest">LV</span>
@@ -130,8 +171,12 @@ export default function PacManGame({ matchCtx, onWinner }: Props) {
 
       {/* Canvas */}
       <div className="relative border border-c-border" style={{ boxShadow: '0 0 40px rgba(26,26,255,0.3)' }}>
-        <canvas ref={canvasRef} width={W} height={H}
-          style={{ display: 'block', imageRendering: 'pixelated', width: W * SCALE, height: H * SCALE }} />
+        <canvas
+          ref={canvasRef}
+          width={W}
+          height={H}
+          style={{ display: 'block', imageRendering: 'pixelated', width: W * scale, height: H * scale }}
+        />
 
         {phase === 'gameOver' && !matchCtx && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 bg-black/60">
@@ -148,12 +193,18 @@ export default function PacManGame({ matchCtx, onWinner }: Props) {
       </div>
 
       {/* Controls legend */}
-      <div className="flex gap-10 opacity-50">
-        {(!matchCtx || matchCtx.mySlot === 1) && (
-          <Legend label={matchCtx ? 'MOVE' : 'P1'} keys={['↑', '←', '↓', '→']} color="#ffe000" />
-        )}
-        {(!matchCtx || matchCtx.mySlot === 2) && (
-          <Legend label={matchCtx ? 'MOVE' : 'P2'} keys={['W', 'A', 'S', 'D']} color="#00d4ff" />
+      <div className="flex gap-6 opacity-50">
+        {isMobile ? (
+          <span className="font-px text-[7px] text-slate-400 tracking-widest">SWIPE TO MOVE</span>
+        ) : (
+          <>
+            {(!matchCtx || matchCtx.mySlot === 1) && (
+              <Legend label={matchCtx ? 'MOVE' : 'P1'} keys={['↑', '←', '↓', '→']} color="#ffe000" />
+            )}
+            {(!matchCtx || matchCtx.mySlot === 2) && (
+              <Legend label={matchCtx ? 'MOVE' : 'P2'} keys={['W', 'A', 'S', 'D']} color="#00d4ff" />
+            )}
+          </>
         )}
       </div>
     </div>

@@ -111,9 +111,9 @@ export async function handlePlayerReady(address: string, matchId: string) {
   if (other) send(other, 'match:opponent_ready', { matchId })
   telem('match:ready', { matchId, address })
   if (bet.ready[bet.creator] && bet.ready[bet.opponent]) {
-    send(bet.creator, 'match:countdown', { matchId, seconds: 15 })
-    send(bet.opponent, 'match:countdown', { matchId, seconds: 15 })
-    telem('match:countdown', { matchId, p1: bet.creator, p2: bet.opponent, seconds: 15 })
+    send(bet.creator, 'match:countdown', { matchId, seconds: 3 })
+    send(bet.opponent, 'match:countdown', { matchId, seconds: 3 })
+    telem('match:countdown', { matchId, p1: bet.creator, p2: bet.opponent, seconds: 3 })
     const match = createMatchInstance(bet.gameSlug, matchId, bet.creator, bet.opponent)
     if (bet.isCasual) {
       attachCasualComplete(match, matchId, bet.creator, bet.opponent)
@@ -125,7 +125,7 @@ export async function handlePlayerReady(address: string, matchId: string) {
       send(bet.creator, 'match:begin', { matchId, p1: bet.creator, p2: bet.opponent })
       send(bet.opponent, 'match:begin', { matchId, p1: bet.creator, p2: bet.opponent })
       telem('match:begin', { matchId, p1: bet.creator, p2: bet.opponent, gameSlug: bet.gameSlug, amount: bet.amount, denom: bet.denom })
-    }, 15_000)
+    }, 3_000)
   }
 }
 

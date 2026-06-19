@@ -3,6 +3,7 @@ import LeftSidebar from './components/layout/LeftSidebar'
 import Navbar from './components/layout/Navbar'
 import ChatSidebar from './components/layout/ChatSidebar'
 import GameGrid from './components/lobby/GameGrid'
+import PublicMatchList from './components/lobby/PublicMatchList'
 import GamePage from './pages/GamePage'
 import SettingsPage from './pages/SettingsPage'
 import AdminPage from './pages/AdminPage'
@@ -19,6 +20,7 @@ const IS_PACTEST = new URLSearchParams(window.location.search).has('test') &&
 function MainApp() {
   const currentGame = useRouterStore((s) => s.currentGame)
   const settingsOpen = useRouterStore((s) => s.settingsOpen)
+  const publicGamesOpen = useRouterStore((s) => s.publicGamesOpen)
   const navigate = useRouterStore((s) => s.navigate)
   const setJoinTarget = useMatchStore((s) => s.setJoinTarget)
   const { open: chatOpen, toggleOpen: toggleChat } = useChatStore()
@@ -139,7 +141,12 @@ function MainApp() {
         <div className="flex flex-col flex-1 overflow-hidden min-w-0">
           <Navbar />
           <main className="flex-1 overflow-y-auto pb-16 md:pb-0">
-            {settingsOpen ? <SettingsPage /> : <GameGrid />}
+            {settingsOpen
+              ? <SettingsPage />
+              : publicGamesOpen
+                ? <div className="px-4 py-5 md:px-7 md:py-7"><PublicMatchList /></div>
+                : <GameGrid />
+            }
           </main>
           <MobileBottomNav />
         </div>
@@ -161,9 +168,14 @@ function MainApp() {
 
 function MobileBottomNav() {
   const settingsOpen = useRouterStore((s) => s.settingsOpen)
+  const publicGamesOpen = useRouterStore((s) => s.publicGamesOpen)
   const toggleSettings = useRouterStore((s) => s.toggleSettings)
+  const togglePublicGames = useRouterStore((s) => s.togglePublicGames)
   const navigate = useRouterStore((s) => s.navigate)
-  const { toggleOpen } = useChatStore()
+  const { open: chatOpen, toggleOpen } = useChatStore()
+
+  const closeChat = () => { if (chatOpen) toggleOpen() }
+  const isHome = !settingsOpen && !publicGamesOpen
 
   return (
     <nav className="md:hidden fixed bottom-0 inset-x-0 z-30
@@ -174,22 +186,30 @@ function MobileBottomNav() {
       <NavBtn
         icon="⊞"
         label="Home"
-        active={!settingsOpen}
-        onClick={() => { if (settingsOpen) toggleSettings(); navigate(null) }}
+        active={isHome}
+        onClick={() => { closeChat(); navigate(null) }}
+      />
+
+      {/* Public Games */}
+      <NavBtn
+        icon="🌐"
+        label="Games"
+        active={publicGamesOpen}
+        onClick={() => { closeChat(); togglePublicGames() }}
       />
 
       {/* Tournaments */}
-      <NavBtn icon="⚔" label="Tournaments" disabled />
+      <NavBtn icon="⚔" label="Tourneys" disabled />
 
       {/* Chat */}
-      <NavBtn icon="💬" label="Chat" onClick={toggleOpen} />
+      <NavBtn icon="💬" label="Chat" active={chatOpen} onClick={toggleOpen} />
 
-      {/* Settings */}
+      {/* Profile */}
       <NavBtn
-        icon="⚙"
-        label="Settings"
+        icon="👤"
+        label="Profile"
         active={settingsOpen}
-        onClick={toggleSettings}
+        onClick={() => { closeChat(); toggleSettings() }}
       />
     </nav>
   )
@@ -217,7 +237,7 @@ function NavBtn({ icon, label, active, disabled, onClick }: {
 
 function PacManTestPage() {
   return (
-    <div className="min-h-screen bg-black flex items-center justify-center overflow-auto py-8">
+    <div className="h-[100dvh] bg-black flex items-center justify-center overflow-hidden">
       <PacManGame />
     </div>
   )

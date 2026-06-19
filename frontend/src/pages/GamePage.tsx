@@ -19,7 +19,7 @@ export default function GamePage({ slug }: Props) {
   }
 
   return (
-    <div className="relative flex flex-col items-center justify-start min-h-screen bg-c-bg font-ui text-slate-200 overflow-y-auto">
+    <div className="relative flex flex-col items-center justify-start h-[100dvh] bg-c-bg font-ui text-slate-200 overflow-hidden">
 
       {/* Header — only visible once playing */}
       {phase === 'playing' && (
@@ -38,7 +38,7 @@ export default function GamePage({ slug }: Props) {
       )}
 
       {/* Game area */}
-      <div className="relative w-full max-w-5xl px-2 md:px-6 pb-6 md:pb-10 overflow-x-auto">
+      <div className="relative w-full max-w-5xl px-2 md:px-6 overflow-hidden">
         {slug === 'pacman' ? (
           <PacManGame matchCtx={ctx ?? undefined} onWinner={announceWinner} />
         ) : (

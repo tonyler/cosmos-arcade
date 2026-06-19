@@ -33,6 +33,10 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     const { address } = await connectKeplr()
     set({ connected: true, address, username: null })
     ws.reconnect(address)
+    fetch(import.meta.env.BASE_URL + `api/username/${address}`)
+      .then((r) => r.json())
+      .then((d) => { if (d.username) set({ username: d.username }) })
+      .catch(() => {})
     getBalances(address).then((coins) => {
       const atom = coins.find((c) => c.denom === 'uatom')
       if (atom) {

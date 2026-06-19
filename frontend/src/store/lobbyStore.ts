@@ -41,7 +41,7 @@ export const useLobbyStore = create<LobbyState>((set) => {
     fetchMatches: async () => {
       set({ loading: true })
       try {
-        const res = await fetch('/api/lobby')
+        const res = await fetch(import.meta.env.BASE_URL + 'api/lobby')
         const { matches } = await res.json()
         set({ openMatches: matches ?? [], loading: false })
       } catch {

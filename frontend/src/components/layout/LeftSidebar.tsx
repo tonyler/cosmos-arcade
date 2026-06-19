@@ -1,4 +1,14 @@
+import { useRouterStore } from '../../store/routerStore'
+
 export default function LeftSidebar() {
+  const settingsOpen = useRouterStore((s) => s.settingsOpen)
+  const publicGamesOpen = useRouterStore((s) => s.publicGamesOpen)
+  const togglePublicGames = useRouterStore((s) => s.togglePublicGames)
+  const toggleSettings = useRouterStore((s) => s.toggleSettings)
+  const navigate = useRouterStore((s) => s.navigate)
+
+  const isHome = !settingsOpen && !publicGamesOpen
+
   return (
     <aside className="hidden md:flex w-56 min-w-56 flex-col bg-c-panel border-r border-c-border relative z-20">
       {/* Logo */}
@@ -11,15 +21,29 @@ export default function LeftSidebar() {
 
       {/* Nav */}
       <nav className="flex-1 py-2">
-        {/* Home — active */}
-        <div className="relative flex items-center gap-3 px-5 py-4 cursor-pointer
-          bg-violet-900/20 text-slate-100
-          font-mono text-sm font-bold uppercase tracking-wide"
-        >
-          <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-violet-500" />
-          <span className="text-base w-5 text-center">⊞</span>
-          Home
-        </div>
+        {/* Home */}
+        <SidebarItem
+          icon="⊞"
+          label="Home"
+          active={isHome}
+          onClick={() => navigate(null)}
+        />
+
+        {/* Public Games */}
+        <SidebarItem
+          icon="🌐"
+          label="Public Games"
+          active={publicGamesOpen}
+          onClick={togglePublicGames}
+        />
+
+        {/* Profile */}
+        <SidebarItem
+          icon="👤"
+          label="Profile"
+          active={settingsOpen}
+          onClick={toggleSettings}
+        />
 
         {/* Tournaments — disabled */}
         <div className="relative flex items-center gap-3 px-5 py-4
@@ -35,5 +59,28 @@ export default function LeftSidebar() {
         </div>
       </nav>
     </aside>
+  )
+}
+
+function SidebarItem({ icon, label, active, onClick }: {
+  icon: string
+  label: string
+  active: boolean
+  onClick: () => void
+}) {
+  return (
+    <div
+      onClick={onClick}
+      className={`relative flex items-center gap-3 px-5 py-4 cursor-pointer
+        font-mono text-sm font-bold uppercase tracking-wide transition-colors
+        ${active
+          ? 'bg-violet-900/20 text-slate-100'
+          : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
+        }`}
+    >
+      {active && <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-violet-500" />}
+      <span className="text-base w-5 text-center">{icon}</span>
+      {label}
+    </div>
   )
 }
