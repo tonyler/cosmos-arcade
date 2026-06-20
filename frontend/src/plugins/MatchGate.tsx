@@ -7,7 +7,7 @@ import { toDisplay, toUbase } from '../lib/format'
 
 interface Props {
   gameSlug: string
-  onClose: () => void  // navigates back to lobby
+  onClose: () => void
 }
 
 export default function MatchGate({ gameSlug, onClose }: Props) {
@@ -15,7 +15,7 @@ export default function MatchGate({ gameSlug, onClose }: Props) {
   const playerId = address ?? guestId
   const {
     phase, joinTarget, shareLink, iAmReady, opponentReady, countdown, error,
-    createBet, joinBet, startCasual, joinCasual, markReady,
+    mySlot, create, join, markReady,
   } = useMatchStore()
 
   const [selectedMode, setSelectedMode] = useState<'casual' | 'competitive' | null>(null)
@@ -25,16 +25,18 @@ export default function MatchGate({ gameSlug, onClose }: Props) {
   const [opponent, setOpponent] = useState('')
   const [copied, setCopied] = useState(false)
 
-  // Reset mode selection when store resets to idle
   useEffect(() => {
     if (phase === 'idle') setSelectedMode(null)
   }, [phase])
 
-  // Always hidden while game is live
-  if (phase === 'playing' || phase === 'settling' || phase === 'complete') return null
+  // Hidden while game is live or in terminal states (MatchSettler handles those)
+  if (phase === 'playing' || phase === 'settling' || phase === 'complete' ||
+      phase === 'settlement_failed' || phase === 'disputed') return null
 
   const isJoinMode = !!joinTarget
   const isCasualJoin = isJoinMode && !!joinTarget?.isCasual
+  const isJoiner = mySlot === 2
+  const busy = phase !== 'idle'  // TX or WS action in flight
 
   const copyLink = () => {
     if (!shareLink) return
@@ -45,6 +47,7 @@ export default function MatchGate({ gameSlug, onClose }: Props) {
 
   const headerLabel = () => {
     if (phase === 'ready') return 'MATCH READY'
+    if (phase === 'joining') return isJoinMode && !isCasualJoin ? 'LOCKING FUNDS...' : 'JOINING...'
     if (isJoinMode) return isCasualJoin ? 'CASUAL MATCH' : 'JOIN MATCH'
     if (selectedMode === null) return 'SELECT MODE'
     if (selectedMode === 'casual') return 'CASUAL MATCH'
@@ -87,26 +90,28 @@ export default function MatchGate({ gameSlug, onClose }: Props) {
 
           <div className="px-5 py-5 flex flex-col gap-5">
             {error && (
-              <div className="font-mono text-xs text-red-400 bg-red-900/20 border border-red-800/40 px-3 py-2">{error}</div>
+              <div className="flex items-start gap-2 font-mono text-xs text-red-400 bg-red-900/20 border border-red-800/40 px-3 py-2">
+                <span className="flex-1">{error}</span>
+                <button onClick={() => useMatchStore.setState({ error: null })}
+                  className="text-red-600 hover:text-red-400 leading-none shrink-0">×</button>
+              </div>
             )}
 
             {/* ── MODE SELECTION ── */}
             {phase === 'idle' && !isJoinMode && selectedMode === null && (
-              <>
-                <Field label="MODE">
-                  <div className="flex gap-2">
-                    {(['casual', 'competitive'] as const).map((m) => (
-                      <button key={m} onClick={() => setSelectedMode(m)}
-                        className="flex-1 font-mono text-xs py-2 border transition-colors bg-c-bg border-c-border text-slate-400 hover:border-violet-500/50">
-                        {m === 'casual' ? 'CASUAL' : 'COMPETITIVE'}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="font-mono text-[10px] text-slate-600 mt-1">
-                    Casual — free to play · Competitive — lock tokens, winner takes all
-                  </p>
-                </Field>
-              </>
+              <Field label="MODE">
+                <div className="flex gap-2">
+                  {(['casual', 'competitive'] as const).map((m) => (
+                    <button key={m} onClick={() => setSelectedMode(m)}
+                      className="flex-1 font-mono text-xs py-2 border transition-colors bg-c-bg border-c-border text-slate-400 hover:border-violet-500/50">
+                      {m === 'casual' ? 'CASUAL' : 'COMPETITIVE'}
+                    </button>
+                  ))}
+                </div>
+                <p className="font-mono text-[10px] text-slate-600 mt-1">
+                  Casual — free to play · Competitive — lock tokens, winner takes all
+                </p>
+              </Field>
             )}
 
             {/* ── CASUAL CREATE ── */}
@@ -114,7 +119,7 @@ export default function MatchGate({ gameSlug, onClose }: Props) {
               <>
                 <VisibilityField isPublic={isPublic} setIsPublic={setIsPublic} />
                 {!isPublic && <OpponentInput value={opponent} onChange={setOpponent} />}
-                <Cta onClick={() => { ensureWsConnected(); startCasual(playerId, gameSlug, isPublic, isPublic ? null : (opponent.trim() || null)) }}>FIND MATCH</Cta>
+                <Cta disabled={busy} onClick={() => { ensureWsConnected(); create(playerId, gameSlug, 'casual', { isPublic, opponent: isPublic ? null : (opponent.trim() || null) }) }}>FIND MATCH</Cta>
               </>
             )}
 
@@ -125,7 +130,7 @@ export default function MatchGate({ gameSlug, onClose }: Props) {
                   <Row label="MATCH ID" value={joinTarget!.matchId.slice(-12)} mono />
                 </div>
                 <p className="font-mono text-xs text-slate-500">No bets — just play for fun.</p>
-                <Cta onClick={() => { ensureWsConnected(); joinCasual(playerId) }}>JOIN MATCH</Cta>
+                <Cta disabled={busy} onClick={() => { ensureWsConnected(); join(playerId) }}>JOIN MATCH</Cta>
               </>
             )}
 
@@ -138,7 +143,7 @@ export default function MatchGate({ gameSlug, onClose }: Props) {
                 </div>
                 <p className="font-mono text-xs text-slate-500">Locking the same amount to join. Winner takes the pot.</p>
                 {connected
-                  ? <Cta onClick={() => address && joinBet(address)}>LOCK &amp; JOIN</Cta>
+                  ? <Cta disabled={busy} onClick={() => address && join(address)}>LOCK &amp; JOIN</Cta>
                   : <ConnectButton />
                 }
               </>
@@ -172,20 +177,20 @@ export default function MatchGate({ gameSlug, onClose }: Props) {
                 {!isPublic && <OpponentInput value={opponent} onChange={setOpponent} />}
 
                 {connected
-                  ? <Cta onClick={() => address && createBet(address, gameSlug, toUbase(amount), denom, isPublic, isPublic ? null : (opponent.trim() || null))}>LOCK FUNDS</Cta>
+                  ? <Cta disabled={busy} onClick={() => address && create(address, gameSlug, 'competitive', { amount: toUbase(amount), denom, isPublic, opponent: isPublic ? null : (opponent.trim() || null) })}>LOCK FUNDS</Cta>
                   : <ConnectButton />
                 }
               </>
             )}
 
-            {/* creating / joining: TX in flight */}
+            {/* TX in flight */}
             {(phase === 'creating' || phase === 'joining') && <Spinner label="LOCKING FUNDS ON-CHAIN..." />}
 
-            {/* waiting: opponent hasn't joined yet */}
+            {/* waiting */}
             {phase === 'waiting' && (
               <div className="flex flex-col gap-4">
-                <Spinner label="WAITING FOR OPPONENT..." />
-                {shareLink ? (
+                <Spinner label={isJoiner ? 'JOINING MATCH...' : 'WAITING FOR OPPONENT...'} />
+                {!isJoiner && shareLink && (
                   <div className="flex flex-col gap-2">
                     <span className="font-mono text-[10px] text-slate-500 uppercase tracking-wider">Invite link</span>
                     <div className="flex gap-2">
@@ -197,13 +202,14 @@ export default function MatchGate({ gameSlug, onClose }: Props) {
                       </button>
                     </div>
                   </div>
-                ) : (
+                )}
+                {!isJoiner && !shareLink && (
                   <p className="font-mono text-xs text-slate-500">Match listed — waiting for someone to join from the lobby.</p>
                 )}
               </div>
             )}
 
-            {/* ready: both joined, each must click READY */}
+            {/* ready */}
             {phase === 'ready' && (
               <div className="flex flex-col gap-5">
                 <div className="flex flex-col gap-2">
@@ -276,12 +282,12 @@ function Row({ label, value, mono }: { label: string; value: string; mono?: bool
   )
 }
 
-function Cta({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+function Cta({ onClick, children, disabled }: { onClick: () => void; children: React.ReactNode; disabled?: boolean }) {
   return (
-    <button onClick={onClick}
-      className="w-full font-mono text-sm font-bold text-white bg-violet-700
-        py-3 border border-violet-600 shadow-[0_4px_0_#3b0f8a]
-        hover:bg-violet-600 active:translate-y-[4px] active:shadow-none transition-all duration-75">
+    <button onClick={onClick} disabled={disabled}
+      className={`w-full font-mono text-sm font-bold text-white bg-violet-700
+        py-3 border border-violet-600 shadow-[0_4px_0_#3b0f8a] transition-all duration-75
+        ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-violet-600 active:translate-y-[4px] active:shadow-none'}`}>
       {children}
     </button>
   )

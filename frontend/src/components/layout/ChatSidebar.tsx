@@ -5,9 +5,9 @@ import { truncate } from '../../lib/format'
 
 export default function ChatSidebar() {
   const {
-    open, activeTab, messages, onlineUsers, dmThreads, unreadDms, activeDm,
+    open, collapsed, activeTab, messages, onlineUsers, dmThreads, unreadDms, activeDm,
     lastSent, dmLastSent,
-    toggleOpen, setTab, sendChatMessage, sendDm, openDm, closeDm,
+    toggleOpen, toggleCollapsed, setTab, sendChatMessage, sendDm, openDm, closeDm,
   } = useChatStore()
   const { connected, address, username } = useWalletStore()
 
@@ -66,28 +66,36 @@ export default function ChatSidebar() {
         'fixed top-[56px] bottom-16 inset-x-0 w-full border-0',
         'transition-transform duration-300 ease-out',
         open ? 'translate-x-0' : 'translate-x-full',
-        // Desktop: relative sidebar with width animation
-        'md:relative md:inset-auto md:z-20 md:h-full md:border-l',
+        // Desktop: fixed overlay on the right — never shifts layout
+        'md:fixed md:inset-auto md:right-0 md:top-0 md:bottom-0 md:border-l',
         'md:translate-x-0 md:transition-all md:duration-300 md:ease-out',
-        open ? 'md:w-[300px] md:min-w-[300px]' : 'md:w-0 md:min-w-0 md:border-transparent',
+        collapsed ? 'md:w-0 md:min-w-0 md:border-transparent' : 'md:w-[300px] md:min-w-[300px]',
       ].join(' ')}
     >
-      {/* Desktop collapse toggle */}
+      {/* Desktop collapse toggle button — sits on the left edge, always clickable */}
       <button
-        onClick={toggleOpen}
+        onClick={toggleCollapsed}
         className="hidden md:flex absolute -left-[17px] top-1/2 -translate-y-1/2 z-30
           w-[17px] h-14 bg-c-surface border border-r-0 border-c-borderhi
           items-center justify-center text-[9px] text-slate-600
           hover:text-slate-300 hover:bg-violet-900/20 hover:border-violet-500/50
           transition-colors duration-100"
-        title={open ? 'Close chat' : 'Open chat'}
+        title={collapsed ? 'Open chat' : 'Close chat'}
       >
-        <span className="inline-block transition-transform duration-300"
-          style={{ transform: open ? '' : 'rotate(180deg)' }}>◀</span>
+        <span
+          className="inline-block transition-transform duration-300"
+          style={{ transform: collapsed ? 'rotate(180deg)' : '' }}
+        >◀</span>
       </button>
 
       <div
-        className={`flex flex-col h-full transition-opacity duration-200 ${open ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        className={[
+          'flex flex-col h-full transition-opacity duration-200',
+          // Mobile: visible when open
+          open ? 'opacity-100' : 'opacity-0 pointer-events-none',
+          // Desktop: visible when not collapsed (overrides mobile state)
+          collapsed ? 'md:opacity-0 md:pointer-events-none' : 'md:opacity-100 md:pointer-events-auto',
+        ].join(' ')}
       >
         {/* Mobile header with close button */}
         <div className="md:hidden flex items-center justify-between px-4 py-3 border-b border-c-border flex-shrink-0">

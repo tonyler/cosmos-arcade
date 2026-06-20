@@ -1,10 +1,3 @@
-export interface Challenge {
-  to: string
-  gameSlug: string
-  amount: string
-  denom: 'uatom' | 'uusdc'
-}
-
 export interface BetCreate {
   matchId: string
   gameSlug: string
@@ -15,11 +8,6 @@ export interface BetCreate {
   txHash: string
 }
 
-export interface BetJoin {
-  matchId: string
-  txHash: string
-}
-
 export interface CasualCreate {
   matchId: string
   gameSlug: string
@@ -27,6 +15,20 @@ export interface CasualCreate {
   opponent: string | null
 }
 
-export interface CasualJoin {
+export interface MatchCancel {
   matchId: string
+}
+
+export interface Bet {
+  matchId: string
+  gameSlug: string
+  creator: string
+  opponent: string | null
+  isCasual: boolean
+  isPublic: boolean
+  status: 'waiting' | 'joined' | 'active' | 'settling' | 'complete' | 'settlement_failed' | 'disputed' | 'abort_failed' | 'cancelled'
+  amount?: string
+  denom?: string
+  ready?: Record<string, boolean>
+  createdAt: number
 }

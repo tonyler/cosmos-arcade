@@ -8,32 +8,18 @@ interface LogEntry {
   [key: string]: unknown
 }
 
-const TYPE_COLOR: Record<string, string> = {
-  'wallet:connect':    'text-emerald-400',
-  'wallet:disconnect': 'text-slate-500',
-  'match:create':      'text-blue-400',
-  'match:join':        'text-cyan-400',
-  'match:ready':       'text-yellow-400',
-  'match:countdown':   'text-yellow-300',
-  'match:begin':       'text-green-400',
-  'game:over':         'text-orange-400',
-  'match:settling':    'text-orange-300',
-  'match:settled':     'text-violet-400',
-  'match:error':       'text-red-400',
-}
-
-const TYPE_ICON: Record<string, string> = {
-  'wallet:connect':    '⬤  ',
-  'wallet:disconnect': '○  ',
-  'match:create':      '♦  ',
-  'match:join':        '♦♦ ',
-  'match:ready':       '▶  ',
-  'match:countdown':   '◌  ',
-  'match:begin':       '▶▶ ',
-  'game:over':         '■  ',
-  'match:settling':    '↑  ',
-  'match:settled':     '★  ',
-  'match:error':       '✕  ',
+const TYPE_META: Record<string, { color: string; icon: string }> = {
+  'wallet:connect':    { color: 'text-emerald-400', icon: '⬤  ' },
+  'wallet:disconnect': { color: 'text-slate-500',   icon: '○  ' },
+  'match:create':      { color: 'text-blue-400',    icon: '♦  ' },
+  'match:join':        { color: 'text-cyan-400',    icon: '♦♦ ' },
+  'match:ready':       { color: 'text-yellow-400',  icon: '▶  ' },
+  'match:countdown':   { color: 'text-yellow-300',  icon: '◌  ' },
+  'match:begin':       { color: 'text-green-400',   icon: '▶▶ ' },
+  'game:over':         { color: 'text-orange-400',  icon: '■  ' },
+  'match:settling':    { color: 'text-orange-300',  icon: '↑  ' },
+  'match:settled':     { color: 'text-violet-400',  icon: '★  ' },
+  'match:error':       { color: 'text-red-400',     icon: '✕  ' },
 }
 
 function ts(epoch: number) {
@@ -170,8 +156,8 @@ export default function AdminPage() {
         {visible.map((e, i) => (
           <div key={i} className="flex items-baseline gap-3 hover:bg-white/[0.02] px-1 -mx-1">
             <span className="text-slate-700 shrink-0 tabular-nums">{ts(e.ts)}</span>
-            <span className={`shrink-0 ${TYPE_COLOR[e.type] ?? 'text-slate-400'}`}>
-              {TYPE_ICON[e.type] ?? '·  '}{e.type}
+            <span className={`shrink-0 ${(TYPE_META[e.type]?.color ?? 'text-slate-400')}`}>
+              {(TYPE_META[e.type]?.icon ?? '·  ')}{e.type}
             </span>
             <span className="text-slate-400">{formatLine(e)}</span>
           </div>

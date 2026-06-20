@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useLobbyStore, type OpenMatch } from '../../store/lobbyStore'
 import { useMatchStore } from '../../store/matchStore'
 import { useRouterStore } from '../../store/routerStore'
@@ -8,13 +8,26 @@ import { GAMES } from '../../lib/games'
 import type { Denom } from '../../lib/escrow'
 
 export default function PublicMatchList() {
-  const { openMatches, loading, fetchMatches } = useLobbyStore()
+  const { openMatches, loading, fetchMatches, cancelNotice, clearCancelNotice } = useLobbyStore()
   const { setJoinTarget } = useMatchStore()
   const navigate = useRouterStore((s) => s.navigate)
   const { address, guestId, ensureWsConnected } = useWalletStore()
   const playerId = address ?? guestId
+  const [now, setNow] = useState(Date.now())
 
-  useEffect(() => { fetchMatches() }, [])
+  useEffect(() => {
+    fetchMatches()
+    const poll = setInterval(fetchMatches, 15_000)
+    const tick = setInterval(() => setNow(Date.now()), 60_000)
+    return () => { clearInterval(poll); clearInterval(tick) }
+  }, [])
+
+  // Auto-dismiss penalty notice after 5 seconds
+  useEffect(() => {
+    if (!cancelNotice) return
+    const t = setTimeout(clearCancelNotice, 5000)
+    return () => clearTimeout(t)
+  }, [cancelNotice])
 
   const join = (m: OpenMatch) => {
     if (!m.isCasual && !address) return  // competitive requires wallet — button is disabled anyway
@@ -50,6 +63,12 @@ export default function PublicMatchList() {
 
   return (
     <div className="flex flex-col gap-2">
+      {cancelNotice && (
+        <div className="flex items-center justify-between gap-3 px-4 py-2.5 bg-amber-900/20 border border-amber-700/50">
+          <span className="font-mono text-[10px] text-amber-400">{cancelNotice}</span>
+          <button onClick={clearCancelNotice} className="text-amber-600 hover:text-amber-400 text-sm leading-none">×</button>
+        </div>
+      )}
       {openMatches.map((m) => {
         const game = GAMES.find((g) => g.slug === m.gameSlug)
         const isOwnMatch = m.creator === playerId
@@ -84,7 +103,7 @@ export default function PublicMatchList() {
 
             {/* Age */}
             <span className="font-mono text-[9px] text-slate-700 shrink-0">
-              {Math.floor((Date.now() - m.createdAt) / 60000)}m ago
+              {Math.floor((now - m.createdAt) / 60000)}m ago
             </span>
 
             {/* Join button */}

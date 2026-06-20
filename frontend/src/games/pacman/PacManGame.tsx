@@ -3,25 +3,11 @@ import { TILE, COLS, ROWS, initGame, update, createInputHandler, type GameState,
 import { render } from './renderer'
 import { ws } from '../../lib/ws'
 import type { MatchContext } from '../../plugins/types'
+import { useCanvasScale } from '../../hooks/useCanvasScale'
 
 const W = COLS * TILE  // 448
 const H = ROWS * TILE  // 496
 const MAX_SCALE = 1.5
-
-function useCanvasScale() {
-  const [scale, setScale] = useState(MAX_SCALE)
-  useEffect(() => {
-    function compute() {
-      const availW = window.innerWidth - 16
-      const availH = window.innerHeight - 140  // HUD ~80px + controls ~40px + padding
-      setScale(Math.min(MAX_SCALE, availW / W, availH / H))
-    }
-    compute()
-    window.addEventListener('resize', compute)
-    return () => window.removeEventListener('resize', compute)
-  }, [])
-  return scale
-}
 
 interface Props {
   matchCtx?: MatchContext
@@ -38,7 +24,7 @@ export default function PacManGame({ matchCtx, onWinner }: Props) {
   const winnerSentRef = useRef(false)
   const [displayState, setDisplayState] = useState(stateRef.current)
   const [restartKey, setRestartKey] = useState(0)
-  const scale = useCanvasScale()
+  const scale = useCanvasScale(MAX_SCALE, W, H, 140)
 
   const restart = () => setRestartKey((k) => k + 1)
 

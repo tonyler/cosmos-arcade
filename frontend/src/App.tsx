@@ -7,15 +7,19 @@ import PublicMatchList from './components/lobby/PublicMatchList'
 import GamePage from './pages/GamePage'
 import SettingsPage from './pages/SettingsPage'
 import AdminPage from './pages/AdminPage'
-import PacManGame from './games/pacman/PacManGame'
+import { lazy, Suspense } from 'react'
+const PacManGame  = lazy(() => import('./games/pacman/PacManGame'))
+const ShooterGame = lazy(() => import('./games/shooter/ShooterGame'))
 import { useRouterStore } from './store/routerStore'
 import { useMatchStore } from './store/matchStore'
 import { useChatStore } from './store/chatStore'
+import { useWalletStore } from './store/walletStore'
 import type { Denom } from './lib/escrow'
 
-const IS_ADMIN   = new URLSearchParams(window.location.search).has('admin')
-const IS_PACTEST = new URLSearchParams(window.location.search).has('test') &&
-                   new URLSearchParams(window.location.search).get('test') === 'pacman'
+const IS_ADMIN    = new URLSearchParams(window.location.search).has('admin')
+const TEST_GAME   = new URLSearchParams(window.location.search).get('test')  // 'pacman' | 'shooter'
+const IS_PACTEST  = TEST_GAME === 'pacman'
+const IS_SHOOTTEST = TEST_GAME === 'shooter'
 
 function MainApp() {
   const currentGame = useRouterStore((s) => s.currentGame)
@@ -23,7 +27,11 @@ function MainApp() {
   const publicGamesOpen = useRouterStore((s) => s.publicGamesOpen)
   const navigate = useRouterStore((s) => s.navigate)
   const setJoinTarget = useMatchStore((s) => s.setJoinTarget)
-  const { open: chatOpen, toggleOpen: toggleChat } = useChatStore()
+  const { open: chatOpen, collapsed: chatCollapsed, toggleOpen: toggleChat } = useChatStore()
+  const { ensureWsConnected } = useWalletStore()
+
+  // Auto-connect WS on mount so lobby users receive live match updates
+  useEffect(() => { ensureWsConnected() }, [])
 
   // Handle ?join= invite links on initial load
   useEffect(() => {
@@ -41,8 +49,6 @@ function MainApp() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  if (currentGame) return <GamePage slug={currentGame} />
 
   return (
     <div className="desktop-zoom relative flex overflow-hidden font-ui text-slate-200 bg-c-bg">
@@ -134,33 +140,38 @@ function MainApp() {
       {/* ── LAYOUT ─────────────────────────────────────────────────────────── */}
       <div className="relative z-10 flex w-full h-full">
 
-        {/* Left sidebar — hidden on mobile */}
-        <LeftSidebar />
+        {/* Left sidebar — hidden on mobile and during active game */}
+        {!currentGame && <LeftSidebar />}
 
-        {/* Main column */}
-        <div className="flex flex-col flex-1 overflow-hidden min-w-0">
-          <Navbar />
-          <main className="flex-1 overflow-y-auto pb-16 md:pb-0">
-            {settingsOpen
-              ? <SettingsPage />
-              : publicGamesOpen
-                ? <div className="px-4 py-5 md:px-7 md:py-7"><PublicMatchList /></div>
-                : <GameGrid />
+        {/* Main column — add right padding on desktop to clear fixed chat sidebar (lobby only) */}
+        <div className={`flex flex-col flex-1 overflow-hidden min-w-0 ${!currentGame && !chatCollapsed ? 'md:pr-[300px]' : ''}`}>
+          {!currentGame && <Navbar />}
+          <main className="flex-1 overflow-hidden">
+            {currentGame
+              ? <GamePage slug={currentGame} />
+              : <div className="h-full overflow-y-auto pb-16 md:pb-0">
+                  {settingsOpen
+                    ? <SettingsPage />
+                    : publicGamesOpen
+                      ? <div className="px-4 py-5 md:px-7 md:py-7"><PublicMatchList /></div>
+                      : <GameGrid />
+                  }
+                </div>
             }
           </main>
-          <MobileBottomNav />
+          {!currentGame && <MobileBottomNav />}
         </div>
 
-        {/* Mobile chat backdrop — below navbar, above bottom nav */}
-        {chatOpen && (
+        {/* Mobile chat backdrop — lobby only */}
+        {!currentGame && chatOpen && (
           <div
             className="fixed top-[56px] bottom-16 inset-x-0 bg-black/60 z-40 md:hidden"
             onClick={toggleChat}
           />
         )}
 
-        {/* Chat sidebar */}
-        <ChatSidebar />
+        {/* Chat sidebar — hidden during active game */}
+        {!currentGame && <ChatSidebar />}
       </div>
     </div>
   )
@@ -237,13 +248,26 @@ function NavBtn({ icon, label, active, disabled, onClick }: {
 
 function PacManTestPage() {
   return (
-    <div className="h-[100dvh] bg-black flex items-center justify-center overflow-hidden">
-      <PacManGame />
-    </div>
+    <Suspense fallback={null}>
+      <div className="h-[100dvh] bg-black flex items-center justify-center overflow-hidden">
+        <PacManGame />
+      </div>
+    </Suspense>
+  )
+}
+
+function ShooterTestPage() {
+  return (
+    <Suspense fallback={null}>
+      <div className="h-[100dvh] bg-[#0a0e14] flex items-center justify-center overflow-hidden">
+        <ShooterGame />
+      </div>
+    </Suspense>
   )
 }
 
 export default function App() {
-  if (IS_PACTEST) return <PacManTestPage />
+  if (IS_PACTEST)   return <PacManTestPage />
+  if (IS_SHOOTTEST) return <ShooterTestPage />
   return IS_ADMIN ? <AdminPage /> : <MainApp />
 }

@@ -35,6 +35,7 @@ function fmtTime(iso: string): string {
 
 interface ChatState {
   open: boolean
+  collapsed: boolean    // desktop sidebar collapsed (independent of mobile open)
   activeTab: 'general' | 'dms'
   messages: ChatMessage[]
   onlineUsers: string[]
@@ -45,6 +46,7 @@ interface ChatState {
   dmLastSent: Record<string, number>
 
   toggleOpen: () => void
+  toggleCollapsed: () => void
   setTab: (tab: 'general' | 'dms') => void
   sendChatMessage: (text: string, username?: string) => boolean
   sendDm: (to: string, text: string, username?: string) => boolean
@@ -127,6 +129,7 @@ export const useChatStore = create<ChatState>((set, get) => {
 
   return {
     open: false,
+    collapsed: false,
     activeTab: 'general',
     messages: [],
     onlineUsers: [],
@@ -137,6 +140,7 @@ export const useChatStore = create<ChatState>((set, get) => {
     dmLastSent: {},
 
     toggleOpen: () => set((s) => ({ open: !s.open })),
+    toggleCollapsed: () => set((s) => ({ collapsed: !s.collapsed })),
     setTab: (tab) => set({ activeTab: tab }),
 
     sendChatMessage: (text, username) => {

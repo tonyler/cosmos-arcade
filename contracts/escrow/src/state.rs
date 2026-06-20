@@ -13,6 +13,7 @@ pub enum MatchStatus {
     Active,
     Complete,
     Refunded,
+    Cancelled,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

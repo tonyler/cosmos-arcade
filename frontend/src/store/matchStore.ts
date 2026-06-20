@@ -1,18 +1,21 @@
 import { create } from 'zustand'
 import { ws } from '../lib/ws'
 import { lockFunds, acceptMatch, type Denom } from '../lib/escrow'
+import { useLobbyStore } from './lobbyStore'
 import type { MatchContext } from '../plugins/types'
 
 export type MatchPhase =
-  | 'idle'        // no active match
-  | 'creating'    // lockFunds TX in flight
-  | 'waiting'     // waiting for opponent to join
-  | 'joining'     // acceptMatch TX in flight
-  | 'ready'       // both joined, waiting for READY clicks
-  | 'countdown'   // both ready, counting down
-  | 'playing'     // game live
-  | 'settling'    // on-chain settlement in progress
-  | 'complete'    // match over
+  | 'idle'
+  | 'creating'
+  | 'waiting'
+  | 'joining'
+  | 'ready'
+  | 'countdown'
+  | 'playing'
+  | 'settling'
+  | 'complete'
+  | 'settlement_failed'
+  | 'disputed'
 
 export type GameMode = 'casual' | 'competitive'
 
@@ -34,8 +37,8 @@ interface MatchState {
   isPublic: boolean
   myAddress: string | null
   mySlot: 1 | 2 | null
-  p1Address: string | null   // creator
-  p2Address: string | null   // joiner
+  p1Address: string | null
+  p2Address: string | null
   opponentAddress: string | null
   shareLink: string | null
   opponentJoined: boolean
@@ -45,16 +48,12 @@ interface MatchState {
   winner: string | null
   error: string | null
   joinTarget: JoinTarget | null
+  opponentDisconnected: boolean
 
-  // Derived
   matchCtx: () => MatchContext | null
-
-  // Actions
   setJoinTarget: (t: JoinTarget | null) => void
-  createBet: (address: string, gameSlug: string, amount: string, denom: Denom, isPublic: boolean, opponent: string | null) => Promise<void>
-  joinBet: (address: string) => Promise<void>
-  startCasual: (address: string, gameSlug: string, isPublic: boolean, opponent: string | null) => void
-  joinCasual: (address: string) => void
+  create: (address: string, gameSlug: string, mode: GameMode, opts: { amount?: string; denom?: Denom; isPublic: boolean; opponent: string | null }) => Promise<void>
+  join: (address: string) => Promise<void>
   markReady: () => void
   announceWinner: (winner: string) => void
   reset: () => void
@@ -68,13 +67,35 @@ function clearCountdown() {
   if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null }
 }
 
+// Auto-expire waiting phase after 1h (matches server Redis TTL)
+let waitingTimer: ReturnType<typeof setTimeout> | null = null
+function clearWaitingTimer() {
+  if (waitingTimer) { clearTimeout(waitingTimer); waitingTimer = null }
+}
+
+// Auto-clear opponent-disconnected banner after server grace period
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+function clearReconnectTimer() {
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }
+}
+
 export const useMatchStore = create<MatchState>((set, get) => {
+  // Server confirmed match is live — update shareLink from server's path if provided
+  ws.on('match:waiting', (data: any) => {
+    if (data.sharePath) {
+      set({ shareLink: window.location.origin + data.sharePath })
+    }
+  })
+
   ws.on('match:opponent_joined', (data: any) => {
+    clearWaitingTimer()
     set({ opponentJoined: true, opponentAddress: data.opponent, phase: 'ready' })
   })
+
   ws.on('match:opponent_ready', () => {
     set({ opponentReady: true })
   })
+
   ws.on('match:countdown', (data: any) => {
     clearCountdown()
     set({ phase: 'countdown', countdown: data.seconds })
@@ -86,6 +107,7 @@ export const useMatchStore = create<MatchState>((set, get) => {
       })
     }, 1000)
   })
+
   ws.on('match:begin', (data: any) => {
     clearCountdown()
     const s = get()
@@ -93,13 +115,62 @@ export const useMatchStore = create<MatchState>((set, get) => {
     const opponentAddress = mySlot === 1 ? data.p2 : data.p1
     set({ phase: 'playing', countdown: 0, mySlot, p1Address: data.p1, p2Address: data.p2, opponentAddress })
   })
+
   ws.on('match:settling', () => set({ phase: 'settling' }))
   ws.on('match:settled', (data: any) => set({ phase: 'complete', winner: data.winner }))
   ws.on('match:complete', (data: any) => {
-    const s = get()
-    if (s.phase !== 'complete') set({ phase: 'complete', winner: data.winner })
+    if (get().phase !== 'complete') set({ phase: 'complete', winner: data.winner })
   })
-  ws.on('match:error', (data: any) => set({ phase: 'idle', error: data.message }))
+
+  ws.on('match:error', (data: any) => {
+    const { phase } = get()
+    if (phase === 'settling') {
+      set({ phase: 'settlement_failed', error: data.message })
+    } else {
+      set({ phase: 'idle', error: data.message })
+    }
+  })
+
+  ws.on('match:disputed', () => {
+    set({ phase: 'disputed' })
+  })
+
+  ws.on('match:cancelled', () => {
+    clearCountdown()
+    clearWaitingTimer()
+    set({ ...base })
+  })
+
+  ws.on('match:opponent_left', () => {
+    set((s) => ({ ...base, phase: 'waiting', matchId: s.matchId, gameSlug: s.gameSlug, myAddress: s.myAddress, mySlot: 1, p1Address: s.p1Address, gameMode: s.gameMode, isPublic: s.isPublic, amount: s.amount, denom: s.denom, shareLink: s.shareLink }))
+    // Restart waiting timer — new opponent slot open
+    clearWaitingTimer()
+    waitingTimer = setTimeout(() => {
+      if (get().phase === 'waiting') set({ phase: 'idle', error: 'Match expired — no opponent joined.' })
+    }, 3_600_000)
+  })
+
+  ws.on('match:creator_left', () => {
+    clearCountdown()
+    clearWaitingTimer()
+    set({ ...base, error: 'The match creator disconnected.' })
+  })
+
+  ws.on('match:opponent_disconnected', () => {
+    clearReconnectTimer()
+    set({ opponentDisconnected: true })
+    // Auto-clear banner after server grace period if forfeit never arrives
+    reconnectTimer = setTimeout(() => {
+      if (get().phase === 'playing') set({ opponentDisconnected: false })
+    }, 31_000)
+  })
+
+  ws.on('match:opponent_forfeited', () => {
+    clearReconnectTimer()
+    set({ opponentDisconnected: false })
+    const myAddr = get().myAddress
+    if (myAddr) get().announceWinner(myAddr)
+  })
 
   const base = {
     phase: 'idle' as MatchPhase,
@@ -108,7 +179,7 @@ export const useMatchStore = create<MatchState>((set, get) => {
     isPublic: true, myAddress: null, mySlot: null,
     p1Address: null, p2Address: null, opponentAddress: null,
     shareLink: null, opponentJoined: false, iAmReady: false, opponentReady: false,
-    countdown: 0, winner: null, error: null, joinTarget: null,
+    countdown: 0, winner: null, error: null, joinTarget: null, opponentDisconnected: false,
   }
 
   return {
@@ -129,46 +200,48 @@ export const useMatchStore = create<MatchState>((set, get) => {
 
     setJoinTarget: (t) => set({ joinTarget: t }),
 
-    createBet: async (address, gameSlug, amount, denom, isPublic, opponent) => {
+    create: async (address, gameSlug, mode, { amount, denom, isPublic, opponent }) => {
       const matchId = makeMatchId(gameSlug)
-      set({ phase: 'creating', gameMode: 'competitive', matchId, gameSlug, amount, denom, isPublic, myAddress: address, mySlot: 1, p1Address: address, error: null })
-      try {
-        await lockFunds(address, { matchId, opponent, amount, denom })
+      if (mode === 'competitive') {
+        set({ phase: 'creating', gameMode: 'competitive', matchId, gameSlug, amount: amount ?? null, denom: denom ?? null, isPublic, myAddress: address, mySlot: 1, p1Address: address, error: null })
+        try {
+          await lockFunds(address, { matchId, opponent, amount: amount!, denom: denom! })
+          const shareLink = isPublic ? null
+            : `${window.location.origin}${import.meta.env.BASE_URL}?join=${matchId}&game=${gameSlug}&amount=${amount}&denom=${denom}`
+          set({ phase: 'waiting', shareLink })
+          ws.send('match:create', { matchId, gameSlug, amount, denom, isPublic, opponent, txHash: '' })
+        } catch (e: any) {
+          set({ phase: 'idle', gameMode: null, error: e.message ?? 'Transaction failed' })
+          return
+        }
+      } else {
         const shareLink = isPublic ? null
-          : `${window.location.origin}${import.meta.env.BASE_URL}?join=${matchId}&game=${gameSlug}&amount=${amount}&denom=${denom}`
-        set({ phase: 'waiting', shareLink })
-        ws.send('match:create', { matchId, gameSlug, amount, denom, isPublic, opponent, txHash: '' })
-      } catch (e: any) {
-        set({ phase: 'idle', gameMode: null, error: e.message ?? 'Transaction failed' })
+          : `${window.location.origin}${import.meta.env.BASE_URL}?join=${matchId}&game=${gameSlug}&casual=true`
+        set({ phase: 'waiting', gameMode: 'casual', matchId, gameSlug, isPublic, myAddress: address, mySlot: 1, p1Address: address, shareLink, error: null })
+        ws.send('match:casual_create', { matchId, gameSlug, isPublic, opponent: isPublic ? null : (opponent || null) })
       }
+      clearWaitingTimer()
+      waitingTimer = setTimeout(() => {
+        if (get().phase === 'waiting') set({ phase: 'idle', error: 'Match expired — no opponent joined.' })
+      }, 3_600_000)
     },
 
-    joinBet: async (address) => {
+    join: async (address) => {
       const { joinTarget } = get()
       if (!joinTarget) return
-      set({ phase: 'joining', gameMode: 'competitive', myAddress: address, mySlot: 2, p2Address: address, matchId: joinTarget.matchId, gameSlug: joinTarget.gameSlug, amount: joinTarget.amount, denom: joinTarget.denom, error: null })
-      try {
-        await acceptMatch(address, joinTarget.matchId, joinTarget.amount, joinTarget.denom)
-        set({ phase: 'waiting' })
-        ws.send('match:join', { matchId: joinTarget.matchId, txHash: '' })
-      } catch (e: any) {
-        set({ phase: 'idle', gameMode: null, error: e.message ?? 'Transaction failed' })
+      if (joinTarget.isCasual) {
+        set({ phase: 'joining', gameMode: 'casual', myAddress: address, mySlot: 2, p2Address: address, matchId: joinTarget.matchId, gameSlug: joinTarget.gameSlug, error: null })
+        ws.send('match:casual_join', { matchId: joinTarget.matchId })
+        // Server responds with match:opponent_joined → phase:'ready'
+      } else {
+        set({ phase: 'joining', gameMode: 'competitive', myAddress: address, mySlot: 2, p2Address: address, matchId: joinTarget.matchId, gameSlug: joinTarget.gameSlug, amount: joinTarget.amount, denom: joinTarget.denom, error: null })
+        try {
+          await acceptMatch(address, joinTarget.matchId, joinTarget.amount, joinTarget.denom)
+          ws.send('match:join', { matchId: joinTarget.matchId, txHash: '' })
+        } catch (e: any) {
+          set({ phase: 'idle', gameMode: null, error: e.message ?? 'Transaction failed' })
+        }
       }
-    },
-
-    startCasual: (address, gameSlug, isPublic, opponent) => {
-      const matchId = makeMatchId(gameSlug)
-      const shareLink = isPublic ? null
-        : `${window.location.origin}${import.meta.env.BASE_URL}?join=${matchId}&game=${gameSlug}&casual=true`
-      set({ phase: 'waiting', gameMode: 'casual', matchId, gameSlug, isPublic, myAddress: address, mySlot: 1, p1Address: address, shareLink, error: null })
-      ws.send('match:casual_create', { matchId, gameSlug, isPublic, opponent: isPublic ? null : (opponent || null) })
-    },
-
-    joinCasual: (address) => {
-      const { joinTarget } = get()
-      if (!joinTarget) return
-      set({ phase: 'waiting', gameMode: 'casual', myAddress: address, mySlot: 2, p2Address: address, matchId: joinTarget.matchId, gameSlug: joinTarget.gameSlug, error: null })
-      ws.send('match:casual_join', { matchId: joinTarget.matchId })
     },
 
     markReady: () => {
@@ -190,7 +263,21 @@ export const useMatchStore = create<MatchState>((set, get) => {
     },
 
     reset: () => {
+      const { phase, matchId, mySlot, opponentAddress, gameMode } = get()
       clearCountdown()
+      clearWaitingTimer()
+      clearReconnectTimer()
+      if (matchId) {
+        if (phase === 'waiting' && mySlot === 1) {
+          useLobbyStore.getState().removeMatch(matchId)
+          ws.send('match:cancel', { matchId })
+        } else if (phase === 'ready' || phase === 'countdown') {
+          ws.send('match:abort', { matchId })
+        } else if (phase === 'playing' && gameMode === 'competitive' && opponentAddress) {
+          // Self-forfeit: opponent wins the pot
+          ws.send('game:over', { matchId, winner: opponentAddress })
+        }
+      }
       set({ ...base })
     },
   }

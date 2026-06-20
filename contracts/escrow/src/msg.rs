@@ -12,6 +12,8 @@ pub enum ExecuteMsg {
     AcceptMatch { match_id: String },
     SettleMatch { match_id: String, winner: String },
     RefundMatch { match_id: String },
+    CancelMatch { match_id: String },
+    AbortMatch { match_id: String },
 }
 
 #[cw_serde]

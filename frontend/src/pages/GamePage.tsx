@@ -1,7 +1,7 @@
+import { Suspense } from 'react'
 import { GAMES } from '../lib/games'
 import { useRouterStore } from '../store/routerStore'
 import { useMatchStore } from '../store/matchStore'
-import PacManGame from '../games/pacman/PacManGame'
 import MatchGate from '../plugins/MatchGate'
 import MatchSettler from '../plugins/MatchSettler'
 
@@ -18,8 +18,23 @@ export default function GamePage({ slug }: Props) {
     navigate(null)
   }
 
+  const GameComponent = game?.component
+
   return (
-    <div className="relative flex flex-col items-center justify-start h-[100dvh] bg-c-bg font-ui text-slate-200 overflow-hidden">
+    <div className="relative flex flex-col items-center justify-center h-full font-ui text-slate-200 overflow-hidden">
+
+      {/* Background — same as landing page */}
+      <div className="absolute inset-0 pointer-events-none select-none">
+        <div className="absolute inset-0" style={{
+          backgroundImage: `linear-gradient(rgba(255,255,255,0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.035) 1px, transparent 1px)`,
+          backgroundSize: '44px 44px',
+        }} />
+        <div className="absolute inset-0" style={{ background: 'radial-gradient(ellipse 80% 55% at 18% 0%, rgba(109,40,217,0.18) 0%, transparent 65%)' }} />
+        <div className="absolute inset-0" style={{ background: 'radial-gradient(ellipse 65% 50% at 82% 105%, rgba(29,78,216,0.14) 0%, transparent 60%)' }} />
+        <div className="absolute inset-0" style={{ background: 'radial-gradient(ellipse 50% 40% at 50% 50%, rgba(30,27,75,0.4) 0%, transparent 70%)' }} />
+        <div className="absolute inset-0" style={{ backgroundImage: 'repeating-linear-gradient(0deg, transparent 0px, transparent 3px, rgba(0,0,0,0.045) 3px, rgba(0,0,0,0.045) 4px)' }} />
+        <div className="absolute top-0 left-0 right-0 h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(139,92,246,0.5) 50%, transparent)' }} />
+      </div>
 
       {/* Header — only visible once playing */}
       {phase === 'playing' && (
@@ -38,16 +53,26 @@ export default function GamePage({ slug }: Props) {
       )}
 
       {/* Game area */}
-      <div className="relative w-full max-w-5xl px-2 md:px-6 overflow-hidden">
-        {slug === 'pacman' ? (
-          <PacManGame matchCtx={ctx ?? undefined} onWinner={announceWinner} />
-        ) : (
-          <ComingSoon game={game} />
-        )}
+      <div className="relative w-full flex justify-center px-2 md:px-6 overflow-hidden">
+        <Suspense fallback={<GameLoader />}>
+          {GameComponent
+            ? <GameComponent matchCtx={ctx ?? undefined} onWinner={announceWinner} />
+            : <ComingSoon game={game} />
+          }
+        </Suspense>
         <MatchSettler />
       </div>
 
       <MatchGate gameSlug={slug} onClose={goBack} />
+    </div>
+  )
+}
+
+function GameLoader() {
+  return (
+    <div className="flex items-center gap-2 py-32 text-slate-600">
+      <span className="w-1.5 h-1.5 rounded-full bg-violet-500 animate-pulse" />
+      <span className="font-mono text-xs tracking-widest">LOADING...</span>
     </div>
   )
 }

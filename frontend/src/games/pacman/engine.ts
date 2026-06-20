@@ -205,7 +205,7 @@ function dist(c1: number, r1: number, c2: number, r2: number) {
 
 function ghostNextDir(ghost: Ghost, grid: number[][], targetC: number, targetR: number): Dir {
   const dirs: Dir[] = [0, 1, 2, 3]
-  let best: Dir = ghost.dir
+  let best: Dir | null = null
   let bestDist = Infinity
 
   for (const d of dirs) {
@@ -219,7 +219,9 @@ function ghostNextDir(ghost: Ghost, grid: number[][], targetC: number, targetR: 
     const d2 = dist(nc, nr, targetC, targetR)
     if (d2 < bestDist) { bestDist = d2; best = d }
   }
-  return best
+  // No valid forward/perpendicular direction — allow reversal rather than
+  // returning ghost.dir which may be a wall at the new tile.
+  return best ?? OPPOSITE[ghost.dir]
 }
 
 function ghostFrightenedDir(ghost: Ghost, grid: number[][]): Dir {
@@ -348,7 +350,9 @@ function movePlayer(p: Player, grid: number[][], dt: number, other: Player): Pla
   // Treat other player as a wall — check before any pixel movement to avoid jitter
   const targetCol = (col + DX[dir] + COLS) % COLS
   const targetRow = row + DY[dir]
-  if (canMove(grid, col, row, dir) && !tileOccupied(other, targetCol, targetRow)) {
+  // A powered player can enter an unpowered opponent's tile (eating handled in checkCollisions)
+  const blockedByOther = tileOccupied(other, targetCol, targetRow) && !(p.powered && !other.powered)
+  if (canMove(grid, col, row, dir) && !blockedByOther) {
     px += DX[dir] * pixels
     py += DY[dir] * pixels
 
@@ -425,7 +429,8 @@ function collectDots(s: GameState): { state: GameState; pelletEaten: boolean } {
 // cause sprites to appear displaced into walls.
 function moveGhost(g: Ghost, grid: number[][], p1: Player, p2: Player, dt: number): Ghost {
   const speed = g.mode === 'frightened' ? FRIGHTENED_SPEED : GHOST_SPEED
-  const pixels = speed * dt * TILE_F
+  // Cap to 90% of one tile to prevent skipping through thin walls on lag spikes
+  const pixels = Math.min(speed * dt * TILE_F, TILE_F * 0.9)
 
   let { px, py, col, row, dir } = g
 
@@ -490,6 +495,18 @@ function moveGhost(g: Ghost, grid: number[][], p1: Player, p2: Player, dt: numbe
     dir = mode === 'frightened'
       ? ghostFrightenedDir({ ...g, col, row, dir, mode }, grid)
       : ghostNextDir({ ...g, col, row, dir, mode }, grid, targetC, targetR)
+
+    // Safety: if chosen direction is still a wall (edge case after mode changes),
+    // try the opposite, then any passable direction
+    if (mode !== 'eaten' && !canMove(grid, col, row, dir)) {
+      const rev = OPPOSITE[dir]
+      if (canMove(grid, col, row, rev)) {
+        dir = rev
+      } else {
+        const fallback = ([0, 1, 2, 3] as Dir[]).find((d) => canMove(grid, col, row, d))
+        if (fallback !== undefined) dir = fallback
+      }
+    }
   }
 
   return { ...g, px, py, col, row, dir, mode }
