@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { ws } from '../lib/ws'
 import { lockFunds, acceptMatch, type Denom } from '../lib/escrow'
 import { useLobbyStore } from './lobbyStore'
-import type { MatchContext } from '../plugins/types'
+import type { MatchContext } from '../types/match'
 
 export type MatchPhase =
   | 'idle'
@@ -81,24 +81,22 @@ function clearReconnectTimer() {
 
 export const useMatchStore = create<MatchState>((set, get) => {
   // Server confirmed match is live — update shareLink from server's path if provided
-  ws.on('match:waiting', (data: any) => {
-    if (data.sharePath) {
-      set({ shareLink: window.location.origin + data.sharePath })
-    }
+  ws.on('match:waiting', ({ sharePath }) => {
+    if (sharePath) set({ shareLink: window.location.origin + sharePath })
   })
 
-  ws.on('match:opponent_joined', (data: any) => {
+  ws.on('match:opponent_joined', ({ opponent }) => {
     clearWaitingTimer()
-    set({ opponentJoined: true, opponentAddress: data.opponent, phase: 'ready' })
+    if (opponent) set({ opponentJoined: true, opponentAddress: opponent, phase: 'ready' })
   })
 
   ws.on('match:opponent_ready', () => {
     set({ opponentReady: true })
   })
 
-  ws.on('match:countdown', (data: any) => {
+  ws.on('match:countdown', ({ seconds }) => {
     clearCountdown()
-    set({ phase: 'countdown', countdown: data.seconds })
+    set({ phase: 'countdown', countdown: seconds })
     countdownInterval = setInterval(() => {
       set((s) => {
         const next = s.countdown - 1
@@ -108,26 +106,31 @@ export const useMatchStore = create<MatchState>((set, get) => {
     }, 1000)
   })
 
-  ws.on('match:begin', (data: any) => {
+  ws.on('match:begin', ({ p1, p2 }) => {
     clearCountdown()
     const s = get()
-    const mySlot: 1 | 2 = s.myAddress === data.p1 ? 1 : 2
-    const opponentAddress = mySlot === 1 ? data.p2 : data.p1
-    set({ phase: 'playing', countdown: 0, mySlot, p1Address: data.p1, p2Address: data.p2, opponentAddress })
+    if (!p1 || !p2) return
+    const mySlot: 1 | 2 = s.myAddress === p1 ? 1 : 2
+    const opponentAddress = mySlot === 1 ? p2 : p1
+    set({ phase: 'playing', countdown: 0, mySlot, p1Address: p1, p2Address: p2, opponentAddress })
   })
 
   ws.on('match:settling', () => set({ phase: 'settling' }))
-  ws.on('match:settled', (data: any) => set({ phase: 'complete', winner: data.winner }))
-  ws.on('match:complete', (data: any) => {
-    if (get().phase !== 'complete') set({ phase: 'complete', winner: data.winner })
+
+  ws.on('match:settled', ({ winner }) => {
+    if (winner) set({ phase: 'complete', winner })
   })
 
-  ws.on('match:error', (data: any) => {
+  ws.on('match:complete', ({ winner }) => {
+    if (get().phase !== 'complete' && winner) set({ phase: 'complete', winner })
+  })
+
+  ws.on('match:error', ({ message }) => {
     const { phase } = get()
     if (phase === 'settling') {
-      set({ phase: 'settlement_failed', error: data.message })
+      set({ phase: 'settlement_failed', error: message ?? 'Settlement failed' })
     } else {
-      set({ phase: 'idle', error: data.message })
+      set({ phase: 'idle', error: message ?? 'Unknown error' })
     }
   })
 
@@ -142,7 +145,8 @@ export const useMatchStore = create<MatchState>((set, get) => {
   })
 
   ws.on('match:opponent_left', () => {
-    set((s) => ({ ...base, phase: 'waiting', matchId: s.matchId, gameSlug: s.gameSlug, myAddress: s.myAddress, mySlot: 1, p1Address: s.p1Address, gameMode: s.gameMode, isPublic: s.isPublic, amount: s.amount, denom: s.denom, shareLink: s.shareLink }))
+    const { matchId, gameSlug, myAddress, p1Address, gameMode, isPublic, amount, denom, shareLink } = get()
+    set({ ...base, phase: 'waiting', matchId, gameSlug, myAddress, mySlot: 1, p1Address, gameMode, isPublic, amount, denom, shareLink })
     // Restart waiting timer — new opponent slot open
     clearWaitingTimer()
     waitingTimer = setTimeout(() => {
@@ -163,6 +167,11 @@ export const useMatchStore = create<MatchState>((set, get) => {
     reconnectTimer = setTimeout(() => {
       if (get().phase === 'playing') set({ opponentDisconnected: false })
     }, 31_000)
+  })
+
+  ws.on('match:opponent_reconnected', () => {
+    clearReconnectTimer()
+    set({ opponentDisconnected: false })
   })
 
   ws.on('match:opponent_forfeited', () => {
@@ -203,15 +212,19 @@ export const useMatchStore = create<MatchState>((set, get) => {
     create: async (address, gameSlug, mode, { amount, denom, isPublic, opponent }) => {
       const matchId = makeMatchId(gameSlug)
       if (mode === 'competitive') {
-        set({ phase: 'creating', gameMode: 'competitive', matchId, gameSlug, amount: amount ?? null, denom: denom ?? null, isPublic, myAddress: address, mySlot: 1, p1Address: address, error: null })
+        if (!amount || !denom) {
+          set({ phase: 'idle', error: 'Amount and denomination are required for competitive matches' })
+          return
+        }
+        set({ phase: 'creating', gameMode: 'competitive', matchId, gameSlug, amount, denom, isPublic, myAddress: address, mySlot: 1, p1Address: address, error: null })
         try {
-          await lockFunds(address, { matchId, opponent, amount: amount!, denom: denom! })
+          await lockFunds(address, { matchId, opponent, amount, denom })
           const shareLink = isPublic ? null
             : `${window.location.origin}${import.meta.env.BASE_URL}?join=${matchId}&game=${gameSlug}&amount=${amount}&denom=${denom}`
           set({ phase: 'waiting', shareLink })
           ws.send('match:create', { matchId, gameSlug, amount, denom, isPublic, opponent, txHash: '' })
-        } catch (e: any) {
-          set({ phase: 'idle', gameMode: null, error: e.message ?? 'Transaction failed' })
+        } catch (e: unknown) {
+          set({ phase: 'idle', gameMode: null, error: e instanceof Error ? e.message : 'Transaction failed' })
           return
         }
       } else {
@@ -238,8 +251,8 @@ export const useMatchStore = create<MatchState>((set, get) => {
         try {
           await acceptMatch(address, joinTarget.matchId, joinTarget.amount, joinTarget.denom)
           ws.send('match:join', { matchId: joinTarget.matchId, txHash: '' })
-        } catch (e: any) {
-          set({ phase: 'idle', gameMode: null, error: e.message ?? 'Transaction failed' })
+        } catch (e: unknown) {
+          set({ phase: 'idle', gameMode: null, error: e instanceof Error ? e.message : 'Transaction failed' })
         }
       }
     },

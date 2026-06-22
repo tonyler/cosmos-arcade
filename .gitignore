@@ -29,3 +29,6 @@ Thumbs.db
 *.png
 *.jpeg
 *.jpg
+# Allow game thumbnails in public assets
+!frontend/public/assets/games/*.jpg
+!frontend/public/assets/games/*.png

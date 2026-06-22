@@ -1,5 +1,5 @@
 import { lazy, type ComponentType } from 'react'
-import type { MatchContext } from '../plugins/types'
+import type { MatchContext } from '../types/match'
 
 // ── Shared props contract every game component must satisfy ──────────────────
 export interface GameProps {
@@ -17,26 +17,47 @@ export interface Game {
   category: 'Arcade' | 'Puzzle' | 'Action' | 'Strategy'
   players: string
   thumb?: string
+  comingSoon?: boolean
   component: ComponentType<GameProps>
 }
 
 export const GAMES: Game[] = [
+  {
+    slug: 'snake',
+    title: 'Snake Duel',
+    description: 'Eat atoms to grow. Outlast your opponent. First to crash loses the wager.',
+    category: 'Arcade',
+    players: '1v1',
+    thumb: '/hackathon/assets/games/snake.jpg',
+    comingSoon: true,
+    component: lazy(() => import('../games/snake/SnakeGame')),
+  },
+  {
+    slug: 'retro-fps',
+    title: 'Retro FPS',
+    description: 'Classic raycasting deathmatch. First to 10 frags wins. WASD + mouse look.',
+    category: 'Action',
+    players: '1v1',
+    thumb: '/hackathon/assets/games/retro-fps.svg',
+    comingSoon: true,
+    component: lazy(() => import('../games/retro-fps/RetroFPSGame')),
+  },
+  {
+    slug: 'arena3d',
+    title: 'Void Arena',
+    description: 'First to 5 kills in a 3D neon arena. WASD + mouse aim. Wager your ATOM.',
+    category: 'Action',
+    players: '1v1',
+    thumb: '/hackathon/assets/games/arena3d.jpg',
+    component: lazy(() => import('../games/arena3d/Arena3DGame')),
+  },
   {
     slug: 'pacman',
     title: 'Pac-Man',
     description: 'Most dots eaten in 90 seconds takes the wager. Ghosts are not your friends.',
     category: 'Arcade',
     players: '1–2P',
-    thumb: '/hackathon/assets/games/pacman.jpeg',
+    thumb: '/hackathon/assets/games/pacman.jpg',
     component: lazy(() => import('../games/pacman/PacManGame')),
-  },
-  {
-    slug: 'shooter',
-    title: 'Dead Zone',
-    description: 'First to 10 kills takes the wager. WASD + mouse aim. No mercy.',
-    category: 'Action',
-    players: '1v1',
-    thumb: '/hackathon/assets/games/shooter.jpeg',
-    component: lazy(() => import('../games/shooter/ShooterGame')),
   },
 ]

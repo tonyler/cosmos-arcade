@@ -1,4 +1,3 @@
-import type { WebSocket } from 'ws'
 import { redis } from '../../redis'
 import { broadcast, send, onlinePlayers } from '../rooms'
 import { broadcastOpenMatch, handleForfeit } from './match'
@@ -8,10 +7,24 @@ import type { Bet } from './types'
 
 const FORFEIT_GRACE_MS = 30_000  // 30s to reconnect before forfeit
 
-export async function handleLobbyJoin(ws: WebSocket, address: string) {
+export async function handleLobbyJoin(address: string) {
   await redis.set(`online:${address}`, '1', 'EX', 300)
   broadcast('lobby:player_joined', { address }, address)
-  ws.send(JSON.stringify({ type: 'lobby:players', data: { players: onlinePlayers() } }))
+  send(address, 'lobby:players', { players: onlinePlayers() })
+
+  // Notify opponent if reconnecting during an active match
+  const matchId = await redis.get(`match:active:${address}`)
+  if (matchId) {
+    const raw = await redis.get(`match:bet:${matchId}`)
+    if (raw) {
+      const bet = JSON.parse(raw) as Bet
+      if (bet.status === 'active') {
+        const other = bet.creator === address ? bet.opponent : bet.creator
+        if (other) send(other, 'match:opponent_reconnected', { matchId })
+      }
+    }
+  }
+
   telem('wallet:connect', { address })
 }
 
