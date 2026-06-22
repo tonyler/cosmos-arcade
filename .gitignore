@@ -32,3 +32,6 @@ Thumbs.db
 # Allow game thumbnails in public assets
 !frontend/public/assets/games/*.jpg
 !frontend/public/assets/games/*.png
+# Allow docs screenshots
+!docs/screenshots/*.png
+!docs/screenshots/*.jpg

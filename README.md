@@ -15,12 +15,12 @@ Casual mode is free. Competitive mode locks tokens. That's the whole idea.
 ### Pac-Man PvP
 Two players, same maze. Most dots eaten in 90 seconds wins.
 
-![Pac-Man PvP](frontend/public/assets/games/pacman.jpg)
+![Pac-Man PvP](docs/screenshots/pacgh.png)
 
 ### Void Arena
 3D arena shooter in the browser. First to 5 kills wins. WASD + mouse aim.
 
-![Void Arena](frontend/public/assets/games/arena3d.jpg)
+![Void Arena](docs/screenshots/voidgh.png)
 
 ### Retro FPS *(coming soon)*
 Classic raycasting deathmatch. First to 10 frags.
