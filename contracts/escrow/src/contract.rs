@@ -28,6 +28,9 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> R
 
 fn create_match(deps: DepsMut, env: Env, info: MessageInfo, match_id: String, opponent: Option<String>) -> Result<Response, ContractError> {
     if MATCHES.has(deps.storage, &match_id) { return Err(ContractError::MatchAlreadyExists); }
+    if info.funds.len() != 1 {
+        return Err(ContractError::InvalidFunds { msg: "exactly one coin required".to_string() });
+    }
     let coin = info.funds.first().ok_or(ContractError::WrongFunds)?;
     let opponent_addr = opponent.map(|o| deps.api.addr_validate(&o)).transpose()?;
     MATCHES.save(deps.storage, &match_id, &Match {
@@ -49,6 +52,9 @@ fn accept_match(deps: DepsMut, info: MessageInfo, match_id: String) -> Result<Re
     match &m.opponent {
         Some(addr) => { if *addr != info.sender { return Err(ContractError::Unauthorized); } }
         None => { m.opponent = Some(info.sender.clone()); } // public match — first joiner claims the slot
+    }
+    if info.funds.len() != 1 {
+        return Err(ContractError::InvalidFunds { msg: "exactly one coin required".to_string() });
     }
     let coin = info.funds.first().ok_or(ContractError::WrongFunds)?;
     if coin.amount != m.amount || coin.denom != m.denom { return Err(ContractError::WrongFunds); }

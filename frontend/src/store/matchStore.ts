@@ -60,7 +60,7 @@ interface MatchState {
 }
 
 const makeMatchId = (gameSlug: string) =>
-  `${gameSlug}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+  `${gameSlug}-${crypto.randomUUID()}`
 
 let countdownInterval: ReturnType<typeof setInterval> | null = null
 function clearCountdown() {

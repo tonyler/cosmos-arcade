@@ -26,10 +26,17 @@ export function attachWS(server: Server) {
     if (!address) { ws.close(1008, 'address required'); return }
 
     if (address === '__admin__') {
+      const adminSecret = process.env.ADMIN_SECRET
       ws.on('message', async (raw) => {
         try {
-          const { type } = JSON.parse(raw.toString())
-          if (type === 'admin:subscribe') subscribeAdmin(ws)
+          const { type, data } = JSON.parse(raw.toString())
+          if (type === 'admin:subscribe') {
+            if (adminSecret && data?.secret !== adminSecret) {
+              ws.send(JSON.stringify({ type: 'admin:error', data: { message: 'Unauthorized' } }))
+              return
+            }
+            subscribeAdmin(ws)
+          }
         } catch {}
       })
       ws.on('close', () => unsubscribeAdmin(ws))
@@ -37,7 +44,7 @@ export function attachWS(server: Server) {
     }
 
     register(address, ws)
-    handleLobbyJoin(ws, address)
+    handleLobbyJoin(address)
 
     ws.on('message', async (raw) => {
       try {
@@ -86,7 +93,12 @@ export function attachWS(server: Server) {
           case 'game:over':
             if (hasStrings(data, 'matchId', 'winner')) await handleGameOver(address, data.matchId, data.winner)
             break
-          case 'admin:subscribe': subscribeAdmin(ws); break
+          case 'admin:subscribe': {
+            const adminSecret = process.env.ADMIN_SECRET
+            if (!adminSecret || data?.secret === adminSecret) subscribeAdmin(ws)
+            else ws.send(JSON.stringify({ type: 'admin:error', data: { message: 'Unauthorized' } }))
+            break
+          }
         }
       } catch (e) {
         console.error('[ws] error', e)

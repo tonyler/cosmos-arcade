@@ -9,15 +9,17 @@ import type { BetCreate, CasualCreate, MatchCancel, Bet } from './types'
 interface Match {
   player1: string
   player2: string
+  gameSlug: string
   phase: 'waiting' | 'complete'
   onComplete: ((winner: string) => void) | null
   terminate(winner: string): void
 }
 
-function createMatch(p1: string, p2: string): Match {
+function createMatch(p1: string, p2: string, gameSlug: string): Match {
   const m: Match = {
     player1: p1,
     player2: p2,
+    gameSlug,
     phase: 'waiting',
     onComplete: null,
     terminate(winner) {
@@ -38,9 +40,16 @@ export function broadcastOpenMatch(matchId: string, gameSlug: string, creator: s
 function cleanupMatch(matchId: string, creator?: string, opponent?: string) {
   activeMatches.delete(matchId)
   redis.del(`match:settling:${matchId}`).catch(() => {})
+  redis.del(`match:ready:${matchId}`).catch(() => {})
   const dels = [`match:bet:${matchId}`]
-  if (creator)  dels.push(`match:active:${creator}`)
-  if (opponent) dels.push(`match:active:${opponent}`)
+  if (creator) {
+    dels.push(`match:active:${creator}`)
+    dels.push(`match:kills:${matchId}:${creator}`)
+  }
+  if (opponent) {
+    dels.push(`match:active:${opponent}`)
+    dels.push(`match:kills:${matchId}:${opponent}`)
+  }
   redis.del(...dels).catch(() => {})
 }
 
@@ -108,14 +117,19 @@ export async function handleCreate(creator: string, data: BetCreate | CasualCrea
 // ── Join (bet or casual) ──────────────────────────────────────────────────────
 
 export async function handleJoin(joiner: string, data: { matchId: string }, isCasual: boolean) {
+  // Acquire NX lock to prevent double-join race
+  const lock = await redis.set(`match:join-lock:${data.matchId}`, joiner, 'EX', 30, 'NX')
+  if (!lock) { send(joiner, 'match:error', { message: 'Match already being joined — try again' }); return }
+
   const raw = await redis.get(`match:bet:${data.matchId}`)
-  if (!raw) { send(joiner, 'match:error', { message: 'Match not found or expired' }); return }
+  if (!raw) { await redis.del(`match:join-lock:${data.matchId}`); send(joiner, 'match:error', { message: 'Match not found or expired' }); return }
   const bet = JSON.parse(raw)
-  if (bet.status !== 'waiting') { send(joiner, 'match:error', { message: 'Match already full' }); return }
-  if (joiner === bet.creator) { send(joiner, 'match:error', { message: 'Cannot join your own match' }); return }
+  if (bet.status !== 'waiting') { await redis.del(`match:join-lock:${data.matchId}`); send(joiner, 'match:error', { message: 'Match already full' }); return }
+  if (joiner === bet.creator) { await redis.del(`match:join-lock:${data.matchId}`); send(joiner, 'match:error', { message: 'Cannot join your own match' }); return }
 
   // Prevent casual/competitive type mismatch
   if (!!bet.isCasual !== isCasual) {
+    await redis.del(`match:join-lock:${data.matchId}`)
     send(joiner, 'match:error', { message: isCasual ? 'This is a competitive match — use competitive join' : 'This is a casual match — use casual join' })
     return
   }
@@ -127,6 +141,8 @@ export async function handleJoin(joiner: string, data: { matchId: string }, isCa
     redis.zadd(`user:matches:${joiner}`, Date.now(), data.matchId)
       .then(() => redis.zremrangebyrank(`user:matches:${joiner}`, 0, -201)),
   ])
+  // Release lock — join is committed
+  await redis.del(`match:join-lock:${data.matchId}`)
   if (updatedBet.isPublic) {
     await redis.zrem('match:public', data.matchId)
     broadcast('lobby:match_taken', { matchId: data.matchId })
@@ -146,21 +162,25 @@ export async function handlePlayerReady(address: string, matchId: string) {
   if (bet.status !== 'joined') { send(address, 'match:error', { message: 'Match not in ready phase' }); return }
   if (address !== bet.creator && address !== bet.opponent) { send(address, 'match:error', { message: 'Not a participant' }); return }
 
-  const ready = { ...(bet.ready ?? {}), [address]: true }
-  const updatedBet: Bet = { ...bet, ready }
-  await redis.set(`match:bet:${matchId}`, JSON.stringify(updatedBet), 'EX', 3600)
+  // Atomic ready tracking via Redis hash — avoids read-modify-write race
+  await redis.hset(`match:ready:${matchId}`, address, '1')
+  await redis.expire(`match:ready:${matchId}`, 3600)
+  const readyCount = await redis.hlen(`match:ready:${matchId}`)
 
-  const other = updatedBet.creator === address ? updatedBet.opponent : updatedBet.creator
+  const other = bet.creator === address ? bet.opponent : bet.creator
   if (other) send(other, 'match:opponent_ready', { matchId })
   telem('match:ready', { matchId, address })
 
-  if (ready[updatedBet.creator] && updatedBet.opponent && ready[updatedBet.opponent]) {
+  if (readyCount >= 2) {
     // Atomic gate — only one of the two simultaneous ready handlers starts the countdown
     const gate = await redis.set(`match:countdown:${matchId}`, '1', 'EX', 30, 'NX')
     if (!gate) return  // other handler already started countdown
 
+    // Clean up ready hash now that countdown is starting
+    redis.del(`match:ready:${matchId}`).catch(() => {})
+
     // Extend TTL to 24h now that the game is going live
-    const activeBet: Bet = { ...updatedBet, status: 'active' }
+    const activeBet: Bet = { ...bet, status: 'active' }
     await redis.set(`match:bet:${matchId}`, JSON.stringify(activeBet), 'EX', 86400)
     await Promise.all([
       redis.expire(`match:active:${activeBet.creator}`, 86400),
@@ -171,7 +191,7 @@ export async function handlePlayerReady(address: string, matchId: string) {
     send(activeBet.opponent!, 'match:countdown', { matchId, seconds: 3 })
     telem('match:countdown', { matchId, p1: activeBet.creator, p2: activeBet.opponent, seconds: 3 })
 
-    const match = createMatch(activeBet.creator, activeBet.opponent!)
+    const match = createMatch(activeBet.creator, activeBet.opponent!, activeBet.gameSlug)
     attachCompletion(match, matchId, activeBet.creator, activeBet.opponent!, activeBet)
     activeMatches.set(matchId, match)
 
@@ -281,12 +301,29 @@ export async function handleCancelMatch(address: string, data: MatchCancel) {
 
 // ── Real-time state relay (hot path — sync, no Redis) ─────────────────────────
 
+const SHOOTER_KILL_LIMIT = 10
+
 export function handleGameState(from: string, matchId: string, stateData: unknown) {
   const match = activeMatches.get(matchId)
   if (!match || (from !== match.player1 && from !== match.player2)) return
   // ponytail: 8KB cap on relayed state — increase if game state grows
   if (JSON.stringify(stateData).length > 8192) return
   const other = match.player1 === from ? match.player2 : match.player1
+
+  // Track kills for shooter matches to validate game:over claims
+  if (match.gameSlug === 'shooter') {
+    const data = stateData as Record<string, unknown>
+    if (typeof data.kills === 'number') {
+      const killKey = `match:kills:${matchId}:${from}`
+      redis.get(killKey).then((prev) => {
+        const prevKills = prev !== null ? parseInt(prev, 10) : 0
+        if ((data.kills as number) > prevKills) {
+          redis.set(killKey, String(data.kills), 'EX', 86400).catch(() => {})
+        }
+      }).catch(() => {})
+    }
+  }
+
   send(other, 'game:state', stateData)
 }
 
@@ -295,6 +332,9 @@ export function handleGameState(from: string, matchId: string, stateData: unknow
 export function handleGameInput(from: string, matchId: string, slot: 1 | 2, dir: number) {
   const match = activeMatches.get(matchId)
   if (!match || (from !== match.player1 && from !== match.player2)) return
+  // Derive slot from match state — reject if sender claims the wrong slot
+  const actualSlot: 1 | 2 = match.player1 === from ? 1 : 2
+  if (slot !== actualSlot) return
   const other = match.player1 === from ? match.player2 : match.player1
   send(other, 'game:input', { matchId, slot, dir })
 }
@@ -342,6 +382,16 @@ export async function handleGameOver(from: string, matchId: string, winner: stri
   }
   if (SETTLED_STATUSES.has(bet.status)) return
 
+  // For shooter matches: validate winner has >= kill limit kills per server-tracked state
+  if (bet.gameSlug === 'shooter') {
+    const winnerKillsRaw = await redis.get(`match:kills:${matchId}:${winner}`)
+    const winnerKills = winnerKillsRaw !== null ? parseInt(winnerKillsRaw, 10) : 0
+    if (winnerKills < SHOOTER_KILL_LIMIT) {
+      telem('game:over:invalid_kills', { matchId, from, winner, serverKills: winnerKills, required: SHOOTER_KILL_LIMIT })
+      return
+    }
+  }
+
   // Record this player's report (NX = first report only, no changing votes)
   const stored = await redis.set(`match:gameover:${matchId}:${from}`, winner, 'EX', 300, 'NX')
   if (!stored) return  // already reported
@@ -358,12 +408,29 @@ export async function handleGameOver(from: string, matchId: string, winner: stri
     return
   }
 
-  // Only one report so far — wait for other player before settling
-  setTimeout(async () => {
-    const alreadySettling = await redis.exists(`match:settling:${matchId}`)
-    if (alreadySettling) return
-    const myReport = await redis.get(`match:gameover:${matchId}:${from}`)
-    if (!myReport) return  // key expired
-    await doSettle(matchId, myReport, from)
-  }, CONSENSUS_TIMEOUT_MS)
+  // Only one report so far — for casual matches use timeout fallback; for competitive require both reports
+  if (bet.isCasual) {
+    setTimeout(async () => {
+      const alreadySettling = await redis.exists(`match:settling:${matchId}`)
+      if (alreadySettling) return
+      const myReport = await redis.get(`match:gameover:${matchId}:${from}`)
+      if (!myReport) {
+        // key expired — attempt a fresh lookup of both reports before giving up
+        console.error('[game:over] report key expired before timeout fired, attempting recovery', { matchId, from })
+        const rawBet = await redis.get(`match:bet:${matchId}`)
+        if (!rawBet) return
+        const freshBet = JSON.parse(rawBet)
+        const freshOther = from === freshBet.creator ? freshBet.opponent : freshBet.creator
+        const freshOtherReport = freshOther ? await redis.get(`match:gameover:${matchId}:${freshOther}`) : null
+        if (freshOtherReport && !SETTLED_STATUSES.has(freshBet.status)) {
+          // Other player reported — settle with their reported winner
+          await doSettle(matchId, freshOtherReport, freshOther)
+        }
+        return
+      }
+      await doSettle(matchId, myReport, from)
+    }, CONSENSUS_TIMEOUT_MS)
+  }
+  // For competitive matches: do nothing — both players must report. If the other player
+  // never reports (crash/disconnect), the forfeit path or admin refund handles it.
 }

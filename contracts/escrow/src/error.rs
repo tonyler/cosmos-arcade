@@ -15,4 +15,6 @@ pub enum ContractError {
     InvalidState,
     #[error("Wrong funds")]
     WrongFunds,
+    #[error("Invalid funds: {msg}")]
+    InvalidFunds { msg: String },
 }

@@ -1,7 +1,7 @@
 import { redis } from '../../redis'
 import { broadcast, send, onlinePlayers } from '../rooms'
 import { broadcastOpenMatch, handleForfeit } from './match'
-import { abortMatchOnChain } from '../../chain/settlement'
+import { abortMatchOnChain, cancelMatchOnChain } from '../../chain/settlement'
 import { telem } from '../telemetry'
 import type { Bet } from './types'
 
@@ -31,6 +31,17 @@ export async function handleLobbyJoin(address: string) {
 // ── Disconnect sub-handlers ────────────────────────────────────────────────────
 
 async function cancelWaiting(matchId: string, bet: Bet, address: string) {
+  if (!bet.isCasual) {
+    // Competitive match — refund on-chain BEFORE deleting Redis so failure is recoverable
+    try {
+      await cancelMatchOnChain(matchId)
+    } catch (e) {
+      console.error('[cancelWaiting] on-chain refund failed', e)
+      await redis.set(`match:bet:${matchId}`, JSON.stringify({ ...bet, status: 'abort_failed', failedAt: Date.now() }), 'EX', 86400)
+      telem('match:cancel_on_disconnect_failed', { matchId, creator: address, error: String(e) })
+      return
+    }
+  }
   await Promise.all([
     redis.del(`match:bet:${matchId}`),
     redis.del(`match:active:${address}`),
