@@ -3,6 +3,7 @@ import express from 'express'
 import { createServer } from 'http'
 import { redis } from './redis'
 import { attachWS } from './ws'
+import { startRecoveryJob } from './recovery'
 import apiRouter from './api'
 
 const PORT = Number(process.env.PORT ?? 4000)
@@ -17,6 +18,7 @@ async function main() {
 
   const server = createServer(app)
   attachWS(server)
+  startRecoveryJob()
 
   server.listen(PORT, () => console.log(`[server] listening on :${PORT}`))
 }
