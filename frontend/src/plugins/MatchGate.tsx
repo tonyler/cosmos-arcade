@@ -19,7 +19,7 @@ export default function MatchGate({ gameSlug, onClose }: Props) {
   } = useMatchStore()
 
   const [selectedMode, setSelectedMode] = useState<'casual' | 'competitive' | null>(null)
-  const [amount, setAmount] = useState('1')
+  const [amount, setAmount] = useState('0.05')
   const [denom, setDenom] = useState<Denom>('uatom')
   const [isPublic, setIsPublic] = useState(true)
   const [opponent, setOpponent] = useState('')
@@ -166,7 +166,7 @@ export default function MatchGate({ gameSlug, onClose }: Props) {
 
                 <Field label="AMOUNT">
                   <div className="flex items-center border border-c-border bg-c-bg focus-within:border-violet-500 transition-colors">
-                    <input type="number" min="0.1" step="0.1" value={amount}
+                    <input type="number" min="0.05" step="0.05" value={amount}
                       onChange={(e) => setAmount(e.target.value)}
                       className="flex-1 bg-transparent font-mono text-sm text-slate-200 px-3 py-2 outline-none" />
                     <span className="font-mono text-xs text-slate-500 pr-3">{denom === 'uatom' ? 'ATOM' : 'USDC'}</span>
