@@ -46,6 +46,7 @@ interface MatchState {
   opponentReady: boolean
   countdown: number
   winner: string | null
+  txHash: string | null
   error: string | null
   joinTarget: JoinTarget | null
   opponentDisconnected: boolean
@@ -63,29 +64,21 @@ const makeMatchId = (gameSlug: string) =>
   `${gameSlug}-${crypto.randomUUID()}`
 
 let countdownInterval: ReturnType<typeof setInterval> | null = null
-function clearCountdown() {
-  if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null }
-}
-
-// Auto-expire waiting phase after 1h (matches server Redis TTL)
 let waitingTimer: ReturnType<typeof setTimeout> | null = null
-function clearWaitingTimer() {
-  if (waitingTimer) { clearTimeout(waitingTimer); waitingTimer = null }
-}
-
-// Auto-clear opponent-disconnected banner after server grace period
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
-function clearReconnectTimer() {
-  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }
-}
+const clearCountdown      = () => { clearInterval(countdownInterval ?? undefined); countdownInterval = null }
+const clearWaitingTimer   = () => { clearTimeout(waitingTimer ?? undefined); waitingTimer = null }
+const clearReconnectTimer = () => { clearTimeout(reconnectTimer ?? undefined); reconnectTimer = null }
 
 export const useMatchStore = create<MatchState>((set, get) => {
   // Server confirmed match is live — update shareLink from server's path if provided
-  ws.on('match:waiting', ({ sharePath }) => {
+  ws.on('match:waiting', (data: unknown) => {
+    const { sharePath } = data as { sharePath: string }
     if (sharePath) set({ shareLink: window.location.origin + sharePath })
   })
 
-  ws.on('match:opponent_joined', ({ opponent }) => {
+  ws.on('match:opponent_joined', (data: unknown) => {
+    const { opponent } = data as { opponent: string }
     clearWaitingTimer()
     if (opponent) set({ opponentJoined: true, opponentAddress: opponent, phase: 'ready' })
   })
@@ -94,7 +87,8 @@ export const useMatchStore = create<MatchState>((set, get) => {
     set({ opponentReady: true })
   })
 
-  ws.on('match:countdown', ({ seconds }) => {
+  ws.on('match:countdown', (data: unknown) => {
+    const { seconds } = data as { seconds: number }
     clearCountdown()
     set({ phase: 'countdown', countdown: seconds })
     countdownInterval = setInterval(() => {
@@ -106,7 +100,8 @@ export const useMatchStore = create<MatchState>((set, get) => {
     }, 1000)
   })
 
-  ws.on('match:begin', ({ p1, p2 }) => {
+  ws.on('match:begin', (data: unknown) => {
+    const { p1, p2 } = data as { p1: string; p2: string }
     clearCountdown()
     const s = get()
     if (!p1 || !p2) return
@@ -115,17 +110,25 @@ export const useMatchStore = create<MatchState>((set, get) => {
     set({ phase: 'playing', countdown: 0, mySlot, p1Address: p1, p2Address: p2, opponentAddress })
   })
 
-  ws.on('match:settling', () => set({ phase: 'settling' }))
-
-  ws.on('match:settled', ({ winner }) => {
-    if (winner) set({ phase: 'complete', winner })
+  ws.on('match:settling', () => {
+    const { myAddress, winner } = get()
+    // Loser doesn't need to wait for on-chain settlement — skip straight to complete
+    if (winner && winner !== myAddress) set({ phase: 'complete' })
+    else set({ phase: 'settling' })
   })
 
-  ws.on('match:complete', ({ winner }) => {
+  ws.on('match:settled', (data: unknown) => {
+    const { winner, txHash } = data as { winner: string; txHash: string }
+    if (winner) set({ phase: 'complete', winner, txHash })
+  })
+
+  ws.on('match:complete', (data: unknown) => {
+    const { winner } = data as { winner: string }
     if (get().phase !== 'complete' && winner) set({ phase: 'complete', winner })
   })
 
-  ws.on('match:error', ({ message }) => {
+  ws.on('match:error', (data: unknown) => {
+    const { message } = data as { message: string }
     const { phase } = get()
     if (phase === 'settling') {
       set({ phase: 'settlement_failed', error: message ?? 'Settlement failed' })
@@ -188,7 +191,7 @@ export const useMatchStore = create<MatchState>((set, get) => {
     isPublic: true, myAddress: null, mySlot: null,
     p1Address: null, p2Address: null, opponentAddress: null,
     shareLink: null, opponentJoined: false, iAmReady: false, opponentReady: false,
-    countdown: 0, winner: null, error: null, joinTarget: null, opponentDisconnected: false,
+    countdown: 0, winner: null, txHash: null, error: null, joinTarget: null, opponentDisconnected: false,
   }
 
   return {
