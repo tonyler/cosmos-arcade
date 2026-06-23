@@ -5,7 +5,7 @@ import { abortMatchOnChain, cancelMatchOnChain } from '../../chain/settlement'
 import { telem } from '../telemetry'
 import type { Bet } from './types'
 
-const FORFEIT_GRACE_MS = 30_000  // 30s to reconnect before forfeit
+const FORFEIT_GRACE_MS = 10_000  // 10s — no reconnection support, just enough for a page blip
 
 export async function handleLobbyJoin(address: string) {
   await redis.set(`online:${address}`, '1', 'EX', 300)

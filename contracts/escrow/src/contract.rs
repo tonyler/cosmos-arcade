@@ -85,8 +85,8 @@ fn refund_match(deps: DepsMut, env: Env, info: MessageInfo, match_id: String) ->
     let mut m = MATCHES.load(deps.storage, &match_id).map_err(|_| ContractError::MatchNotFound)?;
     let elapsed = env.block.time.seconds() - m.created_at;
     let was_active = m.status == MatchStatus::Active;
-    let can_refund = m.status == MatchStatus::Pending && elapsed > 300
-        || was_active && elapsed > 600;
+    let can_refund = (m.status == MatchStatus::Pending && elapsed > 120)
+        || (was_active && elapsed > 60);
     if !can_refund { return Err(ContractError::InvalidState); }
     let caller_is_participant = info.sender == m.challenger
         || m.opponent.as_ref().map_or(false, |o| *o == info.sender);
@@ -109,30 +109,24 @@ fn refund_match(deps: DepsMut, env: Env, info: MessageInfo, match_id: String) ->
     Ok(Response::new().add_messages(msgs).add_attribute("action", "refund_match"))
 }
 
-// Minimum refund threshold — below this the tx gas cost exceeds the refund value
-const MIN_REFUND_UATOM: u128 = 5_000;
-
-// Creator-initiated cancel (called by game_server on behalf of the user).
-// Refunds full stake if above gas threshold, otherwise sends nothing.
+// Creator-initiated cancel: callable by game_server OR the challenger themselves (Pending only).
 fn cancel_match(deps: DepsMut, info: MessageInfo, match_id: String) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
-    if info.sender != config.game_server { return Err(ContractError::Unauthorized); }
     let mut m = MATCHES.load(deps.storage, &match_id).map_err(|_| ContractError::MatchNotFound)?;
+    if info.sender != config.game_server && info.sender != m.challenger {
+        return Err(ContractError::Unauthorized);
+    }
     if m.status != MatchStatus::Pending { return Err(ContractError::InvalidState); }
     m.status = MatchStatus::Cancelled;
     MATCHES.save(deps.storage, &match_id, &m)?;
-    let mut msgs = vec![];
-    if m.amount.u128() >= MIN_REFUND_UATOM {
-        msgs.push(BankMsg::Send {
-            to_address: m.challenger.to_string(),
-            amount: vec![Coin { denom: m.denom, amount: m.amount }],
-        });
-    }
-    let refunded = m.amount.u128() >= MIN_REFUND_UATOM;
+    let msgs = vec![BankMsg::Send {
+        to_address: m.challenger.to_string(),
+        amount: vec![Coin { denom: m.denom, amount: m.amount }],
+    }];
     Ok(Response::new().add_messages(msgs)
         .add_attribute("action", "cancel_match")
         .add_attribute("match_id", match_id)
-        .add_attribute("refund", if refunded { m.amount.to_string() } else { "0".to_string() }))
+        .add_attribute("refund", m.amount.to_string()))
 }
 
 // Game-server-initiated abort: refunds both players immediately from Active state.
@@ -142,9 +136,10 @@ fn abort_match(deps: DepsMut, info: MessageInfo, match_id: String) -> Result<Res
     if info.sender != config.game_server { return Err(ContractError::Unauthorized); }
     let mut m = MATCHES.load(deps.storage, &match_id).map_err(|_| ContractError::MatchNotFound)?;
     if m.status != MatchStatus::Active { return Err(ContractError::InvalidState); }
+    // Validate opponent exists BEFORE writing state — avoids partial write on error
+    let opponent = m.opponent.clone().ok_or(ContractError::InvalidState)?;
     m.status = MatchStatus::Refunded;
     MATCHES.save(deps.storage, &match_id, &m)?;
-    let opponent = m.opponent.ok_or(ContractError::InvalidState)?;
     let msgs = vec![
         BankMsg::Send { to_address: m.challenger.to_string(), amount: vec![Coin { denom: m.denom.clone(), amount: m.amount }] },
         BankMsg::Send { to_address: opponent.to_string(), amount: vec![Coin { denom: m.denom, amount: m.amount }] },
