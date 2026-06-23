@@ -20,3 +20,7 @@ thiserror = "1"
 
 [dev-dependencies]
 cw-multi-test = "0.20"
+
+# Pin base64ct to avoid edition2024 requirement — needed for old-toolchain builds
+[patch.crates-io]
+base64ct = { version = "=1.6.0" }

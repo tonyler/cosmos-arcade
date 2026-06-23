@@ -4,8 +4,8 @@ import { GasPrice } from '@cosmjs/stargate'
 import { readFileSync } from 'fs'
 
 const MNEMONIC = 'REDACTED_MNEMONIC'
-const RPC = 'https://rpc.cosmos.network:443'
-const WASM_PATH = '/root/arcade/contracts/target/wasm32-unknown-unknown/release/cosmos_arcade_escrow.wasm'
+const RPC = 'https://cosmos-rpc.publicnode.com'
+const WASM_PATH = '/home/cosmos-arcade/contracts/target/wasm32-unknown-unknown/release/cosmos_arcade_escrow_opt.wasm'
 
 async function main() {
   const wallet = await DirectSecp256k1HdWallet.fromMnemonic(MNEMONIC, { prefix: 'cosmos' })
@@ -31,7 +31,7 @@ async function main() {
   const initResult = await client.instantiate(
     account.address,
     uploadResult.codeId,
-    { game_server: account.address },
+    { game_server: account.address, allowed_denoms: ['uatom'] },
     'Cosmos Arcade Escrow',
     'auto',
   )
