@@ -17,4 +17,8 @@ pub enum ContractError {
     WrongFunds,
     #[error("Invalid funds: {msg}")]
     InvalidFunds { msg: String },
+    #[error("Bet too small — minimum is 50000 uatom")]
+    BetTooSmall,
+    #[error("Insufficient pot after gas deduction")]
+    InsufficientPot,
 }

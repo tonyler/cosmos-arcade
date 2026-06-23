@@ -1,8 +1,9 @@
 use cosmwasm_std::{
     entry_point, to_json_binary, BankMsg, Binary, Coin, Deps, DepsMut, Env,
-    MessageInfo, Response, StdResult, Uint128,
+    MessageInfo, Response, StdResult,
 };
 use crate::error::ContractError;
+use crate::fees::{self, MIN_BET};
 use crate::msg::{ExecuteMsg, InstantiateMsg, MatchResponse, QueryMsg};
 use crate::state::{Config, Match, MatchStatus, CONFIG, MATCHES};
 
@@ -32,6 +33,7 @@ fn create_match(deps: DepsMut, env: Env, info: MessageInfo, match_id: String, op
         return Err(ContractError::InvalidFunds { msg: "exactly one coin required".to_string() });
     }
     let coin = info.funds.first().ok_or(ContractError::WrongFunds)?;
+    if coin.amount < MIN_BET { return Err(ContractError::BetTooSmall); }
     let opponent_addr = opponent.map(|o| deps.api.addr_validate(&o)).transpose()?;
     MATCHES.save(deps.storage, &match_id, &Match {
         match_id: match_id.clone(),
@@ -76,7 +78,7 @@ fn settle_match(deps: DepsMut, info: MessageInfo, match_id: String, winner: Stri
     m.status = MatchStatus::Complete;
     m.winner = Some(winner_addr.clone());
     MATCHES.save(deps.storage, &match_id, &m)?;
-    let payout = m.amount.checked_mul(Uint128::new(2)).unwrap();
+    let payout = fees::compute_payout(m.amount)?;
     let send = BankMsg::Send { to_address: winner_addr.to_string(), amount: vec![Coin { denom: m.denom, amount: payout }] };
     Ok(Response::new().add_message(send).add_attribute("action", "settle_match").add_attribute("winner", winner))
 }
@@ -140,9 +142,10 @@ fn abort_match(deps: DepsMut, info: MessageInfo, match_id: String) -> Result<Res
     let opponent = m.opponent.clone().ok_or(ContractError::InvalidState)?;
     m.status = MatchStatus::Refunded;
     MATCHES.save(deps.storage, &match_id, &m)?;
+    let (challenger_share, opponent_share) = fees::compute_abort_payout(m.amount)?;
     let msgs = vec![
-        BankMsg::Send { to_address: m.challenger.to_string(), amount: vec![Coin { denom: m.denom.clone(), amount: m.amount }] },
-        BankMsg::Send { to_address: opponent.to_string(), amount: vec![Coin { denom: m.denom, amount: m.amount }] },
+        BankMsg::Send { to_address: m.challenger.to_string(), amount: vec![Coin { denom: m.denom.clone(), amount: challenger_share }] },
+        BankMsg::Send { to_address: opponent.to_string(), amount: vec![Coin { denom: m.denom, amount: opponent_share }] },
     ];
     Ok(Response::new().add_messages(msgs)
         .add_attribute("action", "abort_match")
