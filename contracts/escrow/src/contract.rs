@@ -5,7 +5,7 @@ use cosmwasm_std::{
 use crate::error::ContractError;
 use crate::fees::{self, MIN_BET};
 use crate::msg::{ExecuteMsg, InstantiateMsg, MatchResponse, MigrateMsg, QueryMsg};
-use crate::state::{Config, Match, MatchStatus, CONFIG, MATCHES};
+use crate::state::{Config, Match, MatchStatus, ACCRUED_FEES, CONFIG, MATCHES};
 
 // Active matches can be refunded by game_server after 10 minutes of no settlement.
 const ACTIVE_REFUND_TIMEOUT_SECS: u64 = 600;
@@ -113,6 +113,12 @@ fn settle_match(deps: DepsMut, info: MessageInfo, match_id: String, winner: Stri
     m.winner = Some(winner_addr.clone());
     MATCHES.save(deps.storage, &match_id, &m)?;
     let payout = fees::compute_payout(m.amount)?;
+    let fee = m.amount.checked_mul(cosmwasm_std::Uint128::new(2))
+        .and_then(|pot| pot.checked_sub(payout))
+        .map_err(|_| ContractError::InsufficientPot)?;
+    ACCRUED_FEES.update(deps.storage, &m.denom, |prev| -> StdResult<_> {
+        Ok(prev.unwrap_or_default().checked_add(fee)?)
+    })?;
     let send = BankMsg::Send {
         to_address: winner_addr.to_string(),
         amount: vec![Coin { denom: m.denom, amount: payout }],
@@ -122,7 +128,8 @@ fn settle_match(deps: DepsMut, info: MessageInfo, match_id: String, winner: Stri
         .add_attribute("action", "settle_match")
         .add_attribute("match_id", match_id)
         .add_attribute("winner", winner)
-        .add_attribute("payout", payout))
+        .add_attribute("payout", payout)
+        .add_attribute("fee", fee))
 }
 
 fn refund_match(deps: DepsMut, env: Env, info: MessageInfo, match_id: String) -> Result<Response, ContractError> {
@@ -197,6 +204,13 @@ fn abort_match(deps: DepsMut, info: MessageInfo, match_id: String) -> Result<Res
     m.status = MatchStatus::Refunded;
     MATCHES.save(deps.storage, &match_id, &m)?;
     let (challenger_share, opponent_share) = fees::compute_abort_payout(m.amount)?;
+    let total_paid = challenger_share.checked_add(opponent_share).map_err(|_| ContractError::InsufficientPot)?;
+    let fee = m.amount.checked_mul(cosmwasm_std::Uint128::new(2))
+        .and_then(|pot| pot.checked_sub(total_paid))
+        .map_err(|_| ContractError::InsufficientPot)?;
+    ACCRUED_FEES.update(deps.storage, &m.denom, |prev| -> StdResult<_> {
+        Ok(prev.unwrap_or_default().checked_add(fee)?)
+    })?;
     let msgs = vec![
         BankMsg::Send { to_address: m.challenger.to_string(), amount: vec![Coin { denom: m.denom.clone(), amount: challenger_share }] },
         BankMsg::Send { to_address: opponent.to_string(), amount: vec![Coin { denom: m.denom, amount: opponent_share }] },
@@ -204,7 +218,8 @@ fn abort_match(deps: DepsMut, info: MessageInfo, match_id: String) -> Result<Res
     Ok(Response::new()
         .add_messages(msgs)
         .add_attribute("action", "abort_match")
-        .add_attribute("match_id", match_id))
+        .add_attribute("match_id", match_id)
+        .add_attribute("fee", fee))
 }
 
 fn update_config(deps: DepsMut, info: MessageInfo, game_server: Option<String>, allowed_denoms: Option<Vec<String>>) -> Result<Response, ContractError> {
@@ -220,20 +235,22 @@ fn update_config(deps: DepsMut, info: MessageInfo, game_server: Option<String>, 
     Ok(Response::new().add_attribute("action", "update_config"))
 }
 
-fn withdraw_fees(deps: DepsMut, env: Env, info: MessageInfo, denom: String, recipient: String) -> Result<Response, ContractError> {
+fn withdraw_fees(deps: DepsMut, _env: Env, info: MessageInfo, denom: String, recipient: String) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
     if info.sender != config.game_server { return Err(ContractError::Unauthorized); }
     let recipient_addr = deps.api.addr_validate(&recipient)?;
-    let balance = deps.querier.query_balance(env.contract.address, &denom)?;
-    if balance.amount.is_zero() { return Err(ContractError::InvalidState); }
+    // Only withdraw tracked accrued fees — never touch escrowed match funds
+    let accrued = ACCRUED_FEES.may_load(deps.storage, &denom)?.unwrap_or_default();
+    if accrued.is_zero() { return Err(ContractError::InvalidState); }
+    ACCRUED_FEES.save(deps.storage, &denom, &cosmwasm_std::Uint128::new(0))?;
     let send = BankMsg::Send {
         to_address: recipient_addr.to_string(),
-        amount: vec![balance.clone()],
+        amount: vec![Coin { denom: denom.clone(), amount: accrued }],
     };
     Ok(Response::new()
         .add_message(send)
         .add_attribute("action", "withdraw_fees")
-        .add_attribute("amount", balance.amount)
+        .add_attribute("amount", accrued)
         .add_attribute("denom", denom)
         .add_attribute("recipient", recipient))
 }

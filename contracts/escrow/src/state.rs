@@ -35,3 +35,5 @@ pub struct Match {
 
 pub const CONFIG: Item<Config> = Item::new("config");
 pub const MATCHES: Map<&str, Match> = Map::new("matches");
+/// Tracks accrued gas reserves per denom — only this amount can be withdrawn.
+pub const ACCRUED_FEES: Map<&str, Uint128> = Map::new("accrued_fees");
