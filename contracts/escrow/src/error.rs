@@ -21,4 +21,8 @@ pub enum ContractError {
     BetTooSmall,
     #[error("Insufficient pot after gas deduction")]
     InsufficientPot,
+    #[error("Denom not allowed")]
+    InvalidDenom,
+    #[error("Match ID too long — max 64 characters")]
+    InvalidMatchId,
 }

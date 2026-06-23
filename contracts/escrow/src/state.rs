@@ -1,13 +1,16 @@
+use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, Uint128};
 use cw_storage_plus::{Item, Map};
-use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[cw_serde]
 pub struct Config {
     pub game_server: Addr,
+    /// Accepted bet denoms. Empty = any denom allowed (dev/test only).
+    pub allowed_denoms: Vec<String>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[cw_serde]
+#[derive(Eq)]
 pub enum MatchStatus {
     Pending,
     Active,
@@ -16,7 +19,7 @@ pub enum MatchStatus {
     Cancelled,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[cw_serde]
 pub struct Match {
     pub match_id: String,
     pub challenger: Addr,
@@ -26,6 +29,8 @@ pub struct Match {
     pub status: MatchStatus,
     pub winner: Option<Addr>,
     pub created_at: u64,
+    /// Set when AcceptMatch is called — used for Active refund timeout.
+    pub activated_at: Option<u64>,
 }
 
 pub const CONFIG: Item<Config> = Item::new("config");
