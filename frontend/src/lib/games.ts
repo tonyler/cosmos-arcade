@@ -23,26 +23,6 @@ export interface Game {
 
 export const GAMES: Game[] = [
   {
-    slug: 'snake',
-    title: 'Snake Duel',
-    description: 'Eat atoms to grow. Outlast your opponent. First to crash loses the wager.',
-    category: 'Arcade',
-    players: '1v1',
-    thumb: '/hackathon/assets/games/snake.jpg',
-    comingSoon: true,
-    component: lazy(() => import('../games/snake/SnakeGame')),
-  },
-  {
-    slug: 'retro-fps',
-    title: 'Retro FPS',
-    description: 'Classic raycasting deathmatch. First to 10 frags wins. WASD + mouse look.',
-    category: 'Action',
-    players: '1v1',
-    thumb: '/hackathon/assets/games/retro-fps.svg',
-    comingSoon: true,
-    component: lazy(() => import('../games/retro-fps/RetroFPSGame')),
-  },
-  {
     slug: 'arena3d',
     title: 'Void Arena',
     description: 'First to 5 kills in a 3D neon arena. WASD + mouse aim. Wager your ATOM.',

@@ -1,3 +1,5 @@
+export type { MatchContext } from '../overlays/types'
+
 export type MatchStatus = 'pending' | 'active' | 'complete' | 'refunded'
 export type Token = 'uatom' | 'uusdc'
 

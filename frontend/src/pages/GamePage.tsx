@@ -2,8 +2,8 @@ import { Suspense } from 'react'
 import { GAMES } from '../lib/games'
 import { useRouterStore } from '../store/routerStore'
 import { useMatchStore } from '../store/matchStore'
-import MatchGate from '../plugins/MatchGate'
-import MatchSettler from '../plugins/MatchSettler'
+import MatchGate from '../overlays/MatchGate'
+import MatchSettler from '../overlays/MatchSettler'
 
 interface Props { slug: string }
 

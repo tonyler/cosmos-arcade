@@ -46,6 +46,7 @@ interface MatchState {
   opponentReady: boolean
   countdown: number
   winner: string | null
+  iAmWinner: boolean | null
   txHash: string | null
   error: string | null
   joinTarget: JoinTarget | null
@@ -119,12 +120,12 @@ export const useMatchStore = create<MatchState>((set, get) => {
 
   ws.on('match:settled', (data: unknown) => {
     const { winner, txHash } = data as { winner: string; txHash: string }
-    if (winner) set({ phase: 'complete', winner, txHash })
+    if (winner) set({ phase: 'complete', winner, txHash, iAmWinner: winner === get().myAddress })
   })
 
   ws.on('match:complete', (data: unknown) => {
     const { winner } = data as { winner: string }
-    if (get().phase !== 'complete' && winner) set({ phase: 'complete', winner })
+    if (get().phase !== 'complete' && winner) set({ phase: 'complete', winner, iAmWinner: winner === get().myAddress })
   })
 
   ws.on('match:error', (data: unknown) => {
@@ -191,7 +192,7 @@ export const useMatchStore = create<MatchState>((set, get) => {
     isPublic: true, myAddress: null, mySlot: null,
     p1Address: null, p2Address: null, opponentAddress: null,
     shareLink: null, opponentJoined: false, iAmReady: false, opponentReady: false,
-    countdown: 0, winner: null, txHash: null, error: null, joinTarget: null, opponentDisconnected: false,
+    countdown: 0, winner: null, iAmWinner: null, txHash: null, error: null, joinTarget: null, opponentDisconnected: false,
   }
 
   return {
@@ -271,10 +272,11 @@ export const useMatchStore = create<MatchState>((set, get) => {
       const { matchId, gameMode } = get()
       if (!matchId) return
       ws.send('game:over', { matchId, winner })
+      const iAmWinner = winner === get().myAddress
       if (gameMode === 'casual') {
-        set({ phase: 'complete', winner })
+        set({ phase: 'complete', winner, iAmWinner })
       } else {
-        set({ phase: 'settling' })
+        set({ phase: 'settling', winner, iAmWinner })
       }
     },
 

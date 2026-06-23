@@ -6,7 +6,7 @@ import {
 } from './engine'
 import { render } from './renderer'
 import { ws } from '../../lib/ws'
-import type { MatchContext } from '../../plugins/types'
+import type { MatchContext } from '../../overlays/types'
 import { useCanvasScale } from '../../hooks/useCanvasScale'
 
 const MAX_SCALE = 1.4

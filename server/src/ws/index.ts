@@ -61,7 +61,7 @@ export function attachWS(server: Server) {
             break
           }
           case 'match:create':
-            if (hasStrings(data, 'matchId', 'gameSlug', 'txHash', 'amount', 'denom'))
+            if (hasStrings(data, 'matchId', 'gameSlug', 'amount', 'denom'))
               await handleCreate(address, data, false)
             break
           case 'match:join':

@@ -2,10 +2,10 @@ import { useMatchStore } from '../store/matchStore'
 import { truncate, toDisplay, DENOM_LABEL } from '../lib/format'
 
 export default function MatchSettler() {
-  const { phase, gameMode, winner, myAddress, amount, denom, matchId, txHash, opponentDisconnected, reset } = useMatchStore()
+  const { phase, gameMode, winner, myAddress, iAmWinner, amount, denom, matchId, txHash, opponentDisconnected, reset } = useMatchStore()
 
   const isCasual = gameMode === 'casual'
-  const iWon = winner === myAddress
+  const iWon = iAmWinner ?? (winner === myAddress)
   const payout = amount ? toDisplay(String(Number(amount) * 2)) : '?'
   const symbol = denom ? (DENOM_LABEL[denom] ?? denom) : ''
 
@@ -73,7 +73,7 @@ export default function MatchSettler() {
 
   return (
     <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/85">
-      {phase === 'settling' && !isCasual ? (
+      {phase === 'settling' && !isCasual && iWon ? (
         <div className="flex items-center gap-3">
           <span className="w-2 h-2 bg-violet-400 rounded-full animate-pulse" />
           <span className="font-px text-[9px] text-slate-400 tracking-widest">SETTLING ON-CHAIN...</span>
@@ -89,7 +89,7 @@ export default function MatchSettler() {
               <span className="font-px text-[11px] text-violet-300">{payout} {symbol}</span>
             </div>
           )}
-          {isCasual && (
+          {(isCasual || !iWon) && (
             <div className="font-mono text-xs text-slate-500 tracking-wider">GG!</div>
           )}
           {iWon && txHash && (

@@ -614,36 +614,8 @@ export function nextRound(s: GameState): GameState {
   }
 }
 
-// ── Input ─────────────────────────────────────────────────────────────────
+// ── Input (server-side: no DOM) ───────────────────────────────────────────
 export interface InputState {
   p1Dir: Dir | null
   p2Dir: Dir | null
-}
-
-export function createInputHandler(): {
-  state: InputState
-  attach: (el: HTMLElement | Window) => () => void
-} {
-  const state: InputState = { p1Dir: null, p2Dir: null }
-
-  const onKey = (e: Event) => {
-    const ke = e as KeyboardEvent
-    switch (ke.key) {
-      case 'ArrowUp':    state.p1Dir = 0; ke.preventDefault(); break
-      case 'ArrowRight': state.p1Dir = 1; ke.preventDefault(); break
-      case 'ArrowDown':  state.p1Dir = 2; ke.preventDefault(); break
-      case 'ArrowLeft':  state.p1Dir = 3; ke.preventDefault(); break
-      case 'w': case 'W': state.p2Dir = 0; break
-      case 'd': case 'D': state.p2Dir = 1; break
-      case 's': case 'S': state.p2Dir = 2; break
-      case 'a': case 'A': state.p2Dir = 3; break
-    }
-  }
-
-  const attach = (el: HTMLElement | Window) => {
-    el.addEventListener('keydown', onKey)
-    return () => el.removeEventListener('keydown', onKey)
-  }
-
-  return { state, attach }
 }

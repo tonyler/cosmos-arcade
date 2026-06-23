@@ -21,6 +21,14 @@ interface LobbyState {
   clearCancelNotice: () => void
 }
 
+function tombstone(s: { openMatches: OpenMatch[]; cancelledIds: Set<string> }, matchId: string) {
+  const arr = [...s.cancelledIds, matchId]
+  return {
+    openMatches: s.openMatches.filter((m) => m.matchId !== matchId),
+    cancelledIds: new Set(arr.length > 500 ? arr.slice(-500) : arr),
+  }
+}
+
 export const useLobbyStore = create<LobbyState>((set) => {
   ws.on('lobby:open_match', (data: any) => {
     const match: OpenMatch = {
@@ -40,13 +48,7 @@ export const useLobbyStore = create<LobbyState>((set) => {
   })
 
   ws.on('lobby:match_cancelled', (data: any) => {
-    set((s) => {
-      const arr = [...s.cancelledIds, data.matchId]
-      return {
-        openMatches: s.openMatches.filter((m) => m.matchId !== data.matchId),
-        cancelledIds: new Set(arr.length > 500 ? arr.slice(-500) : arr),
-      }
-    })
+    set((s) => tombstone(s, data.matchId))
   })
 
   return {
@@ -71,15 +73,7 @@ export const useLobbyStore = create<LobbyState>((set) => {
       }
     },
 
-    removeMatch: (matchId) => {
-      set((s) => {
-        const arr = [...s.cancelledIds, matchId]
-        return {
-          openMatches: s.openMatches.filter((m) => m.matchId !== matchId),
-          cancelledIds: new Set(arr.length > 500 ? arr.slice(-500) : arr),
-        }
-      })
-    },
+    removeMatch: (matchId) => set((s) => tombstone(s, matchId)),
 
     clearCancelNotice: () => set({ cancelNotice: null }),
   }

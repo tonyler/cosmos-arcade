@@ -59,14 +59,15 @@ function drawSprite(
   dx: number, dy: number,
   flipX = false, flipY = false,
 ) {
+  // ponytail: inset 1px on all sides to exclude the 1px border pixels in the sprite sheet
   if (!flipX && !flipY) {
-    ctx.drawImage(img, sx, sy, 16, 16, dx, dy, TILE, TILE)
+    ctx.drawImage(img, sx + 1, sy + 1, 14, 14, dx, dy, TILE, TILE)
     return
   }
   ctx.save()
   ctx.translate(dx + (flipX ? TILE : 0), dy + (flipY ? TILE : 0))
   ctx.scale(flipX ? -1 : 1, flipY ? -1 : 1)
-  ctx.drawImage(img, sx, sy, 16, 16, 0, 0, TILE, TILE)
+  ctx.drawImage(img, sx + 1, sy + 1, 14, 14, 0, 0, TILE, TILE)
   ctx.restore()
 }
 
