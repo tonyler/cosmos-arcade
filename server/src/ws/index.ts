@@ -10,6 +10,8 @@ import {
   handleCancelMatch, handleAbortMatch,
 } from './handlers/match'
 import { subscribeAdmin, unsubscribeAdmin } from './telemetry'
+// Side-effect imports — each file calls registerGame() at module level
+import '../games/pacman/PacManServerGame'
 
 // Validate that all required keys are non-empty strings under 200 chars
 function hasStrings(data: any, ...keys: string[]): boolean {

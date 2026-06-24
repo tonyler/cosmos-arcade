@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Modularity Review — PacMan + Void Arena</title>
+<style>
+  :root {
+    --bg: #0d1117; --surface: #161b22; --border: #30363d;
+    --text: #c9d1d9; --muted: #8b949e; --accent: #7c3aed;
+    --green: #3fb950; --red: #f85149; --yellow: #d29922; --blue: #58a6ff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 15px; line-height: 1.65; padding: 0 0 80px; }
+  .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 36px 48px 32px; }
+  .header h1 { font-size: 22px; font-weight: 600; color: #fff; margin-bottom: 6px; }
+  .meta { color: var(--muted); font-size: 13px; display: flex; gap: 20px; flex-wrap: wrap; margin-top: 8px; }
+  .meta a { color: var(--accent); text-decoration: none; }
+  .meta a:hover { text-decoration: underline; }
+  .content { max-width: 860px; margin: 0 auto; padding: 48px 24px 0; }
+  h2 { font-size: 18px; font-weight: 600; color: #fff; margin: 48px 0 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  h3 { font-size: 14px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin: 28px 0 10px; }
+  p { margin-bottom: 14px; color: var(--text); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 13px; background: rgba(110,64,201,.15); color: #c4b5fd; padding: 2px 6px; border-radius: 4px; }
+  pre { background: #0d1117; border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin: 16px 0 22px; overflow-x: auto; }
+  pre code { background: none; padding: 0; color: #e6edf3; font-size: 13px; line-height: 1.6; }
+  table { width: 100%; border-collapse: collapse; margin: 20px 0 28px; font-size: 13.5px; }
+  th { background: var(--surface); color: var(--muted); font-weight: 500; text-transform: uppercase; font-size: 11px; letter-spacing: .06em; padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border); }
+  td { padding: 10px 14px; border-bottom: 1px solid rgba(48,54,61,.6); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #c4b5fd; }
+  .badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 20px; letter-spacing: .04em; }
+  .badge-critical { background: rgba(248,81,73,.12); color: #f85149; border: 1px solid rgba(248,81,73,.3); }
+  .badge-significant { background: rgba(210,153,34,.12); color: #d29922; border: 1px solid rgba(210,153,34,.3); }
+  .badge-minor { background: rgba(88,166,255,.12); color: #58a6ff; border: 1px solid rgba(88,166,255,.3); }
+  .issue { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 28px 32px; margin: 28px 0; }
+  .issue-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+  .issue-title { font-size: 17px; font-weight: 600; color: #fff; }
+  .issue-meta { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .cascades { background: rgba(248,81,73,.04); border: 1px solid rgba(248,81,73,.15); border-radius: 6px; padding: 14px 18px; margin: 16px 0; }
+  .cascades ul { padding-left: 18px; }
+  .cascades li { margin-bottom: 6px; font-size: 13.5px; color: var(--text); }
+  .cascades li strong { color: #f85149; }
+  .fix { background: rgba(63,185,80,.04); border: 1px solid rgba(63,185,80,.15); border-radius: 6px; padding: 14px 18px; margin: 16px 0; }
+  .fix-label { font-size: 11px; font-weight: 700; color: #3fb950; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px; }
+  .yes { color: var(--green); }
+  .no { color: var(--red); }
+  .marginal { color: var(--yellow); }
+  .exec { background: linear-gradient(135deg, rgba(124,58,237,.08) 0%, rgba(88,166,255,.05) 100%); border: 1px solid rgba(124,58,237,.2); border-radius: 10px; padding: 28px 32px; margin-bottom: 36px; }
+  .exec p { margin-bottom: 10px; }
+  .seq { counter-reset: step; list-style: none; padding: 0; margin: 12px 0; }
+  .seq li { counter-increment: step; display: flex; gap: 14px; margin-bottom: 12px; align-items: flex-start; }
+  .seq li::before { content: counter(step); background: var(--accent); color: #fff; font-size: 11px; font-weight: 700; min-width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-top: 1px; }
+  .seq li .step-text { font-size: 14px; color: var(--text); }
+  .seq li .step-text code { font-size: 12px; }
+  .well { background: rgba(63,185,80,.04); border: 1px solid rgba(63,185,80,.15); border-radius: 10px; padding: 24px 28px; margin-top: 32px; }
+  .well h2 { border-color: rgba(63,185,80,.2); color: #3fb950; margin-top: 0; }
+  .well ul { padding-left: 20px; }
+  .well li { margin-bottom: 8px; font-size: 14px; }
+  footer { margin-top: 60px; padding: 20px 24px; text-align: center; font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); }
+  footer a { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Modularity Review</h1>
+  <div class="meta">
+    <span><strong>Scope:</strong> PacMan + Void Arena — matchmaking, settlement, winner announcement, overlays</span>
+    <span><strong>Date:</strong> 2026-06-24</span>
+    <span><strong>Model:</strong> <a href="https://coupling.dev" target="_blank">Balanced Coupling</a> by <a href="https://vladikk.com" target="_blank">Vlad Khononov</a></span>
+  </div>
+</div>
+
+<div class="content">
+
+  <div class="exec">
+    <h2 style="margin-top:0;border:none;padding:0 0 12px;">Executive Summary</h2>
+    <p>The frontend game plugin contract is well-designed: games receive <code>matchCtx</code> and emit <code>onWinner(address)</code> — a clean, stable boundary that makes adding a new client-side game additive. The problem is on the server side.</p>
+    <p><code>server/src/ws/handlers/match.ts</code> has grown into a 520-line file that simultaneously owns match lifecycle orchestration, game engine hosting, peer-relay forwarding, consensus logic, and on-chain settlement. Two of those responsibilities — engine hosting and peer-relay — change every time a game is added or modified, making the stable lifecycle code a casualty of game-level changes. The planned plugin architecture described in <code>docs/game-integration.md</code> (<code>BaseMatch</code>, <code>server/src/games/&lt;slug&gt;/</code>) was never built; instead, <code>PacManServerGame</code> was embedded inline. With all games moving to server-authoritative execution, this gap will compound with each new title.</p>
+    <p>The second problem is subtler: PacMan and Arena3D use two different server-side execution models (server-authoritative vs peer-relay) with no explicit marker in the shared protocol or registry. The client has no way to know which settlement path a given game will take without reading <code>match.ts</code>. This hidden coupling makes debugging settlement failures difficult — the event sequence differs silently by <code>gameSlug</code>.</p>
+  </div>
+
+  <h2>Coupling Overview</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Integration</th>
+        <th><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Strength</a></th>
+        <th><a href="https://coupling.dev/posts/dimensions-of-coupling/distance/">Distance</a></th>
+        <th><a href="https://coupling.dev/posts/dimensions-of-coupling/volatility/">Volatility</a></th>
+        <th><a href="https://coupling.dev/posts/core-concepts/balance/">Balanced?</a></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>PacManServerGame class inside match.ts</td>
+        <td>Intrusive</td><td>None (same file)</td><td>High</td>
+        <td class="no">❌ No</td>
+      </tr>
+      <tr>
+        <td>Game-slug branching in match.ts</td>
+        <td>Functional</td><td>None (same file)</td><td>High</td>
+        <td class="no">❌ No</td>
+      </tr>
+      <tr>
+        <td>Two settlement paths (server-auth vs peer-relay)</td>
+        <td>Implicit</td><td>Low (same WS)</td><td>High</td>
+        <td class="no">❌ No</td>
+      </tr>
+      <tr>
+        <td>Games → matchStore via onWinner(addr)</td>
+        <td>Contract</td><td>Low (same process)</td><td>Low</td>
+        <td class="yes">✅ Yes</td>
+      </tr>
+      <tr>
+        <td>matchStore → escrow.ts (lockFunds, acceptMatch)</td>
+        <td>Functional</td><td>Low (same module)</td><td>Medium</td>
+        <td class="yes">✅ Yes</td>
+      </tr>
+      <tr>
+        <td>MatchGate → matchStore (phase + 12 fields)</td>
+        <td>Model</td><td>Low (same module)</td><td>Medium</td>
+        <td class="yes">✅ Yes</td>
+      </tr>
+      <tr>
+        <td>MatchSettler → matchStore (phase, winner, txHash)</td>
+        <td>Model</td><td>Low (same module)</td><td>Low</td>
+        <td class="yes">✅ Yes</td>
+      </tr>
+      <tr>
+        <td>match.ts → settlement.ts (settleMatch, etc.)</td>
+        <td>Functional</td><td>Low (same service)</td><td>Low</td>
+        <td class="yes">✅ Yes</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- ISSUE 1 -->
+  <div class="issue">
+    <div class="issue-header">
+      <div>
+        <div class="issue-title">Issue 1 — Server Game Engine Embedded in Lifecycle Orchestrator</div>
+        <div class="issue-meta">Integration: <code>PacManServerGame</code> → <code>match.ts</code></div>
+      </div>
+      <span class="badge badge-critical">Critical</span>
+    </div>
+
+    <h3>Knowledge Leakage</h3>
+    <p><code>PacManServerGame</code> (84 lines — tick loop, input buffering, best-of-3 round logic, server broadcast) is defined directly inside <code>match.ts</code>. The <code>Match</code> interface carries a <code>pacmanGame?: PacManServerGame</code> field. The file imports the game engine at the top level:</p>
+    <pre><code>import { initGame, update, nextRound, type Dir, type GameState } from '../../games/pacman/engine'</code></pre>
+    <p>This means <code>match.ts</code> owns knowledge of two separate domains: <strong>how a match lifecycle runs</strong> (create → join → ready → countdown → begin → settle) and <strong>how PacMan ticks</strong> (fixed 20ms interval, ghost state, round wins, <code>p1Wins &gt;= 3</code>). These have completely different rates of change.</p>
+    <p><code>docs/game-integration.md</code> planned a clean separation — <code>server/src/games/&lt;slug&gt;/&lt;Slug&gt;Match.ts</code>, extending <code>BaseMatch</code> — but it was never built. <code>PacManServerGame</code> is the intended <code>PacManMatch</code>, stranded in the wrong file.</p>
+
+    <h3>Cascading Changes</h3>
+    <div class="cascades">
+      <ul>
+        <li><strong>Add Arena3D server-authoritative</strong> → must edit <code>match.ts</code> to embed <code>Arena3DServerGame</code>, extend the <code>Match</code> interface again (<code>arena3dGame?:</code>), add another <code>if (gameSlug === 'arena3d')</code> branch in <code>handlePlayerReady</code></li>
+        <li><strong>Change PacMan round format</strong> (best-of-3 → best-of-5) → game logic lives in <code>match.ts</code>, not with the game</li>
+        <li><strong>Fix a PacMan engine bug</strong> → tick interval, broadcast logic, and win condition live in <code>match.ts</code>; the fix requires two files for one game</li>
+      </ul>
+    </div>
+
+    <div class="fix">
+      <div class="fix-label">Recommended Fix</div>
+      <p>Extract <code>PacManServerGame</code> to <code>server/src/games/pacman/PacManServerGame.ts</code>. Define a <code>GamePlugin</code> interface:</p>
+      <pre><code>// server/src/games/registry.ts
+export interface GamePlugin {
+  start(): void
+  stop(): void
+  handleInput(slot: 1 | 2, input: unknown): void
+}
+export type PluginFactory = (matchId: string, p1: string, p2: string, onOver: (winner: string) => void) => GamePlugin
+
+const registry = new Map&lt;string, PluginFactory&gt;()
+export const registerGame = (slug: string, f: PluginFactory) => registry.set(slug, f)
+export const getGame = (slug: string) => registry.get(slug)</code></pre>
+      <pre><code>// server/src/games/pacman/PacManServerGame.ts
+import { registerGame } from '../registry'
+// ... PacManServerGame class ...
+registerGame('pacman', (matchId, p1, p2, onOver) => new PacManServerGame(matchId, p1, p2, onOver))</code></pre>
+      <p><code>match.ts</code> becomes game-agnostic — adding a new game means creating one file and calling <code>registerGame()</code>. <code>match.ts</code> never changes for game content.</p>
+    </div>
+  </div>
+
+  <!-- ISSUE 2 -->
+  <div class="issue">
+    <div class="issue-header">
+      <div>
+        <div class="issue-title">Issue 2 — Game-Slug Branching Will Accumulate in match.ts</div>
+        <div class="issue-meta">Integration: per-game <code>if</code> checks in <code>match.ts</code></div>
+      </div>
+      <span class="badge badge-critical">Critical</span>
+    </div>
+
+    <h3>Knowledge Leakage</h3>
+    <p>There are already three game-slug conditionals in <code>match.ts</code>:</p>
+    <pre><code>// handlePlayerReady — line 271
+if (activeBet.gameSlug === 'pacman') { ... }
+
+// handleGameState — line 390
+if (match.gameSlug === 'shooter') { ... }   // kill tracking
+
+// handleGameOver — line 458
+if (match?.pacmanGame) return               // blocks client reports for server-auth games</code></pre>
+    <p>Each represents game-specific knowledge that leaked into the lifecycle module. As games are added, this list grows. The change blast radius grows with it: every new game requires reading and editing the 520-line lifecycle file.</p>
+
+    <h3>Cascading Changes</h3>
+    <div class="cascades">
+      <ul>
+        <li><strong>Add a game with server-side kill tracking</strong> → add <code>else if (match.gameSlug === 'arena3d') { ... }</code> in <code>handleGameState</code></li>
+        <li><strong>Add a server-authoritative game</strong> → add <code>if (match?.arena3dGame) return</code> in <code>handleGameOver</code></li>
+        <li><strong>Change a game's slug</strong> → find all branch sites in <code>match.ts</code> and update them — no tooling will catch a miss</li>
+      </ul>
+    </div>
+
+    <div class="fix">
+      <div class="fix-label">Recommended Fix</div>
+      <p>The registry pattern from Issue 1 dissolves all three branches:</p>
+      <pre><code>// handleGameOver: one check, no game knowledge needed
+if (match.serverGame) return   // all server-auth games block client reports uniformly
+
+// handleGameState relay: only fires when no serverGame (peer-relay mode)
+if (!match.serverGame) send(other, 'game:state', stateData)
+
+// handleGameInput: plugin decides what to do with input
+match.serverGame?.handleInput(actualSlot, dir)</code></pre>
+      <p><code>match.ts</code> stops knowing game slugs entirely. Kill tracking, input buffering, and round logic move into each game plugin.</p>
+    </div>
+  </div>
+
+  <!-- ISSUE 3 -->
+  <div class="issue">
+    <div class="issue-header">
+      <div>
+        <div class="issue-title">Issue 3 — Two Settlement Paths with No Explicit Marker</div>
+        <div class="issue-meta">Integration: PacMan server-auth path vs Arena3D peer-relay path</div>
+      </div>
+      <span class="badge badge-significant">Significant</span>
+    </div>
+
+    <h3>Knowledge Leakage</h3>
+    <p>PacMan and Arena3D reach settlement through completely different event sequences, but nothing in the protocol, the client registry, or the store makes this explicit.</p>
+    <pre><code>// PacMan (server-authoritative) — client is passive:
+server PacManServerGame.onOver(winner)
+  → match.terminate(winner) → onComplete(winner)
+  → send both: match:settling → settleMatch() → match:settled / match:complete
+  ← client never sends game:over
+
+// Arena3D (peer-relay) — client initiates:
+client engine: gameOver detected
+  → onWinner(addr) → announceWinner() → ws.send('game:over', ...)
+  → server consensus (both clients report)
+  → match.terminate(winner) → same settlement path</code></pre>
+    <p>The <code>matchStore</code> handles both paths with the same handlers, but <code>announceWinner</code> sets <code>phase: 'settling'</code> locally before the server responds — only correct for the peer-relay model. For PacMan, <code>phase</code> stays at <code>'playing'</code> until the server fires <code>match:settling</code>. This asymmetry has already caused bugs (winner stuck on settling, loser missing the result screen — both fixed this session).</p>
+    <p>When Arena3D moves to server-authoritative, <code>Arena3DGame.tsx</code>'s <code>onWinner</code> call must be dropped (like PacMan's <code>_onWinner</code>) — but nothing in the game registry signals this, leaving it as undocumented tribal knowledge.</p>
+
+    <h3>Cascading Changes</h3>
+    <div class="cascades">
+      <ul>
+        <li><strong>Move Arena3D to server-authoritative</strong> → must remember to silence <code>onWinner</code> in the component; no code enforces this</li>
+        <li><strong>Add a new server-auth game</strong> → developer must know not to call <code>onWinner</code>, discoverable only by reading <code>PacManGame.tsx</code>'s <code>_onWinner</code> naming convention</li>
+        <li><strong>Debug a settlement hang</strong> → must first determine which execution model the game uses before knowing which event sequence to trace</li>
+      </ul>
+    </div>
+
+    <div class="fix">
+      <div class="fix-label">Recommended Fix</div>
+      <p>Add <code>serverAuthoritative: boolean</code> to the <code>Game</code> registry in <code>games.ts</code>:</p>
+      <pre><code>// frontend/src/lib/games.ts
+export interface Game {
+  slug: string
+  title: string
+  description: string
+  category: 'Arcade' | 'Action' | 'Puzzle' | 'Strategy'
+  players: string
+  thumb?: string
+  serverAuthoritative: boolean   // ← add this
+  component: ComponentType&lt;GameProps&gt;
+}</code></pre>
+      <p><code>matchStore.announceWinner</code> (or <code>GamePage</code>) checks this flag before sending <code>game:over</code>. When Arena3D becomes server-authoritative, flip the flag — no game component code changes required. The execution model is explicit in one place, not inferred from component internals.</p>
+    </div>
+  </div>
+
+  <!-- ISSUE 4 -->
+  <div class="issue">
+    <div class="issue-header">
+      <div>
+        <div class="issue-title">Issue 4 — matchStore Event Handler Topology Is Opaque</div>
+        <div class="issue-meta">Integration: 13 <code>ws.on()</code> registrations at store construction</div>
+      </div>
+      <span class="badge badge-minor">Minor</span>
+    </div>
+
+    <h3>Knowledge Leakage</h3>
+    <p>All 13 WS event handlers are registered in the <code>create()</code> callback body with no structural grouping. Finding which event causes a specific phase transition requires reading all 13 handlers. The handlers mix three concerns with no visual separation: phase transitions (<code>match:settling</code>, <code>match:begin</code>), timer management (<code>clearWaitingTimer()</code>, <code>clearCountdown()</code>), and re-entry guards (<code>if (get().phase !== 'complete')</code>).</p>
+
+    <div class="fix">
+      <div class="fix-label">Recommended Fix — Comments Only, Zero Runtime Change</div>
+      <pre><code>// ── Phase transitions ──────────────────────────────────────────────────────
+ws.on('match:waiting', ...)
+ws.on('match:countdown', ...)
+ws.on('match:begin', ...)
+ws.on('match:settling', ...)
+ws.on('match:settled', ...)
+ws.on('match:complete', ...)
+
+// ── Error terminals ────────────────────────────────────────────────────────
+ws.on('match:error', ...)
+ws.on('match:disputed', ...)
+ws.on('match:cancelled', ...)
+
+// ── Opponent presence ──────────────────────────────────────────────────────
+ws.on('match:opponent_joined', ...)
+ws.on('match:opponent_left', ...)
+ws.on('match:creator_left', ...)
+ws.on('match:opponent_disconnected', ...)
+ws.on('match:opponent_reconnected', ...)
+ws.on('match:opponent_forfeited', ...)</code></pre>
+    </div>
+  </div>
+
+  <!-- WHAT IS WORKING WELL -->
+  <div class="well">
+    <h2>What Is Working Well</h2>
+    <p>The <strong>frontend game plugin contract</strong> is the right design and should be the model for the server side:</p>
+    <ul>
+      <li><code>GameProps = &#123; matchCtx?: MatchContext; onWinner?: (addr: string) =&gt; void &#125;</code> — two fields, typed, stable. Adding a game client-side means: create files under <code>frontend/src/games/&lt;slug&gt;/</code>, add one entry to <code>GAMES[]</code>. Done.</li>
+      <li><code>MatchGate</code> and <code>MatchSettler</code> are correctly separated: creation/join UI vs result UI, each reading only what it needs from <code>matchStore</code>. No overlap.</li>
+      <li><code>server/settlement.ts</code> is a clean three-function module with no game knowledge — <code>settleMatch</code>, <code>cancelMatchOnChain</code>, <code>abortMatchOnChain</code>. It should stay exactly as-is.</li>
+      <li><code>server/protocol.ts</code> is a canonical type file for all 38 WS events with a note to keep client in sync — the right instinct, even if the sync is still manual.</li>
+    </ul>
+    <p style="margin-top:14px">The server plugin pattern just needs to catch up to what the frontend already achieved.</p>
+  </div>
+
+  <!-- RECOMMENDED SEQUENCE -->
+  <h2>Recommended Sequence</h2>
+  <p>Ordered by impact-to-effort ratio given the stated plan (all games → server-authoritative, next game arriving soon):</p>
+  <ol class="seq">
+    <li><div class="step-text">Create <code>server/src/games/registry.ts</code> — define <code>GamePlugin</code> interface and registry (~20 lines, new file)</div></li>
+    <li><div class="step-text">Move <code>PacManServerGame</code> to <code>server/src/games/pacman/PacManServerGame.ts</code> — extract, register, delete from <code>match.ts</code></div></li>
+    <li><div class="step-text">Remove game-slug branches from <code>match.ts</code> — replace three <code>if (gameSlug === …)</code> blocks with plugin dispatch. <code>match.ts</code> loses ~100 lines.</div></li>
+    <li><div class="step-text">Add <code>serverAuthoritative: boolean</code> to <code>games.ts</code> — one field, explicit execution model per game</div></li>
+    <li><div class="step-text">Group <code>matchStore</code> WS handlers by concern — section comments only, zero runtime change, immediate debugging benefit</div></li>
+  </ol>
+  <p>Steps 1–3 together make adding the next server-authoritative game a matter of creating one new file with no edits to lifecycle code.</p>
+
+</div>
+
+<footer>
+  Analysis performed using the <a href="https://coupling.dev" target="_blank">Balanced Coupling</a> model by <a href="https://vladikk.com" target="_blank">Vlad Khononov</a>
+</footer>
+
+</body>
+</html>

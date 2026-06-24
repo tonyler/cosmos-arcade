@@ -3,6 +3,7 @@ import { useMatchStore } from '../store/matchStore'
 import { useWalletStore } from '../store/walletStore'
 import ConnectButton from '../components/wallet/ConnectButton'
 import type { Denom } from '../lib/escrow'
+import { queryMatch } from '../lib/escrow'
 import { toDisplay, toUbase } from '../lib/format'
 
 interface Props {
@@ -24,10 +25,29 @@ export default function MatchGate({ gameSlug, onClose }: Props) {
   const [isPublic, setIsPublic] = useState(true)
   const [opponent, setOpponent] = useState('')
   const [copied, setCopied] = useState(false)
+  const [verifiedAmount, setVerifiedAmount] = useState<string | null>(null)
+  const [amountMismatch, setAmountMismatch] = useState(false)
+  const [amountQueryDone, setAmountQueryDone] = useState(false)
 
   useEffect(() => {
     if (phase === 'idle') setSelectedMode(null)
   }, [phase])
+
+  // Bug 2: verify on-chain amount for competitive joins to catch URL tampering / mismatches
+  useEffect(() => {
+    if (!joinTarget || joinTarget.isCasual) return
+    setVerifiedAmount(null)
+    setAmountMismatch(false)
+    setAmountQueryDone(false)
+    queryMatch(joinTarget.matchId).then((onChain) => {
+      setVerifiedAmount(onChain.amount)
+      if (onChain.amount !== joinTarget.amount) setAmountMismatch(true)
+    }).catch(() => {
+      // query failed — fall back to URL amount, chain TX will enforce correctness
+    }).finally(() => {
+      setAmountQueryDone(true)
+    })
+  }, [joinTarget?.matchId])
 
   // Hidden while game is live or in terminal states (MatchSettler handles those)
   if (phase === 'playing' || phase === 'settling' || phase === 'complete' ||
@@ -84,7 +104,7 @@ export default function MatchGate({ gameSlug, onClose }: Props) {
                   GUEST
                 </span>
               )}
-              <button onClick={onClose} className="text-slate-500 hover:text-slate-300 text-lg leading-none">×</button>
+              <button onClick={onClose} className="text-slate-500 hover:text-slate-300 text-lg leading-none p-2 -mr-2 min-w-[44px] min-h-[44px] flex items-center justify-center">×</button>
             </div>
           </div>
 
@@ -138,12 +158,21 @@ export default function MatchGate({ gameSlug, onClose }: Props) {
             {phase === 'idle' && isJoinMode && !isCasualJoin && (
               <>
                 <div className="flex flex-col gap-3">
-                  <Row label="AMOUNT" value={`${toDisplay(joinTarget!.amount)} ${joinTarget!.denom === 'uatom' ? 'ATOM' : 'USDC'}`} />
+                  <Row label="AMOUNT" value={
+                    !amountQueryDone
+                      ? `${toDisplay(joinTarget!.amount)} ${joinTarget!.denom === 'uatom' ? 'ATOM' : 'USDC'} (verifying...)`
+                      : `${toDisplay(verifiedAmount ?? joinTarget!.amount)} ${joinTarget!.denom === 'uatom' ? 'ATOM' : 'USDC'}`
+                  } />
                   <Row label="MATCH ID" value={joinTarget!.matchId.slice(-12)} mono />
                 </div>
+                {amountMismatch && (
+                  <div className="font-mono text-xs text-amber-400 bg-amber-900/20 border border-amber-700/40 px-3 py-2">
+                    On-chain amount differs from invite link. You will lock {toDisplay(verifiedAmount!)} {joinTarget!.denom === 'uatom' ? 'ATOM' : 'USDC'}.
+                  </div>
+                )}
                 <p className="font-mono text-xs text-slate-500">Locking the same amount to join. Winner takes the pot.</p>
                 {connected
-                  ? <Cta disabled={busy} onClick={() => address && join(address)}>LOCK &amp; JOIN</Cta>
+                  ? <Cta disabled={busy || !amountQueryDone} onClick={() => address && join(address, verifiedAmount ?? undefined)}>LOCK &amp; JOIN</Cta>
                   : <ConnectButton />
                 }
               </>
@@ -168,7 +197,7 @@ export default function MatchGate({ gameSlug, onClose }: Props) {
                   <div className="flex items-center border border-c-border bg-c-bg focus-within:border-violet-500 transition-colors">
                     <input type="number" min="0.05" step="0.05" value={amount}
                       onChange={(e) => setAmount(e.target.value)}
-                      className="flex-1 bg-transparent font-mono text-sm text-slate-200 px-3 py-2 outline-none" />
+                      className="flex-1 bg-transparent font-mono text-sm text-slate-200 px-3 py-3 outline-none min-h-[44px]" />
                     <span className="font-mono text-xs text-slate-500 pr-3">{denom === 'uatom' ? 'ATOM' : 'USDC'}</span>
                   </div>
                 </Field>
@@ -177,7 +206,7 @@ export default function MatchGate({ gameSlug, onClose }: Props) {
                 {!isPublic && <OpponentInput value={opponent} onChange={setOpponent} />}
 
                 {connected
-                  ? <Cta disabled={busy} onClick={() => address && create(address, gameSlug, 'competitive', { amount: toUbase(amount), denom, isPublic, opponent: isPublic ? null : (opponent.trim() || null) })}>LOCK FUNDS</Cta>
+                  ? <Cta disabled={busy || isNaN(Number(amount)) || Number(amount) < 0.05} onClick={() => address && create(address, gameSlug, 'competitive', { amount: toUbase(amount), denom, isPublic, opponent: isPublic ? null : (opponent.trim() || null) })}>LOCK FUNDS</Cta>
                   : <ConnectButton />
                 }
               </>

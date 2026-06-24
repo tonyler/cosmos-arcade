@@ -11,7 +11,7 @@ export default function MatchSettler() {
 
   if (phase === 'playing' && opponentDisconnected) {
     return (
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-3
+      <div className="absolute top-4 left-4 right-4 z-20 flex items-center gap-3
         bg-amber-900/90 border border-amber-700 px-4 py-2 backdrop-blur-sm">
         <span className="w-2 h-2 bg-amber-400 rounded-full animate-pulse shrink-0" />
         <span className="font-px text-[8px] text-amber-300 tracking-widest">OPPONENT DISCONNECTED — WAITING 10s...</span>
@@ -35,8 +35,8 @@ export default function MatchSettler() {
             </div>
           )}
           <button onClick={reset}
-            className="font-px text-[8px] text-white bg-slate-700 hover:bg-slate-600
-              px-8 py-3 border border-slate-600 tracking-widest transition-colors">
+            className="font-px text-[10px] text-white bg-slate-700 hover:bg-slate-600
+              px-8 py-4 border border-slate-600 tracking-widest transition-colors min-h-[44px]">
             BACK TO LOBBY
           </button>
         </div>
@@ -60,8 +60,8 @@ export default function MatchSettler() {
             </div>
           )}
           <button onClick={reset}
-            className="font-px text-[8px] text-white bg-slate-700 hover:bg-slate-600
-              px-8 py-3 border border-slate-600 tracking-widest transition-colors">
+            className="font-px text-[10px] text-white bg-slate-700 hover:bg-slate-600
+              px-8 py-4 border border-slate-600 tracking-widest transition-colors min-h-[44px]">
             BACK TO LOBBY
           </button>
         </div>
@@ -73,7 +73,7 @@ export default function MatchSettler() {
 
   return (
     <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/85">
-      {phase === 'settling' && !isCasual && iWon ? (
+      {phase === 'settling' && !isCasual && (iWon || !winner) ? (
         <div className="flex items-center gap-3">
           <span className="w-2 h-2 bg-violet-400 rounded-full animate-pulse" />
           <span className="font-px text-[9px] text-slate-400 tracking-widest">SETTLING ON-CHAIN...</span>
@@ -86,7 +86,8 @@ export default function MatchSettler() {
           {iWon && !isCasual && amount && (
             <div className="flex flex-col items-center gap-1">
               <span className="font-mono text-xs text-slate-500 uppercase tracking-wider">Payout</span>
-              <span className="font-px text-[11px] text-violet-300">{payout} {symbol}</span>
+              <span className="font-px text-[11px] text-violet-300">≈{payout} {symbol}</span>
+              <span className="font-mono text-[9px] text-slate-600">after platform fee</span>
             </div>
           )}
           {(isCasual || !iWon) && (
@@ -109,9 +110,9 @@ export default function MatchSettler() {
             </div>
           )}
           <button onClick={reset}
-            className="font-px text-[8px] text-white bg-violet-700 hover:bg-violet-600
-              px-8 py-3 border border-violet-600 shadow-[0_3px_0_#3b0f8a]
-              active:translate-y-[3px] active:shadow-none transition-all duration-75 tracking-widest">
+            className="font-px text-[10px] text-white bg-violet-700 hover:bg-violet-600
+              px-8 py-4 border border-violet-600 shadow-[0_3px_0_#3b0f8a]
+              active:translate-y-[3px] active:shadow-none transition-all duration-75 tracking-widest min-h-[44px]">
             BACK TO LOBBY
           </button>
         </div>

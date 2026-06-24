@@ -102,9 +102,9 @@ function startForfeitTimer(matchId: string, address: string, other: string) {
   telem('match:disconnect_grace', { matchId, disconnected: address, gracePeriodMs: FORFEIT_GRACE_MS })
 
   setTimeout(async () => {
-    // Check they're back in this specific match, not just online
-    const stillInMatch = await redis.get(`match:active:${address}`)
-    if (stillInMatch === matchId) return
+    // Check they're back online (match:active is never deleted on disconnect, so check online: key)
+    const stillOnline = await redis.get(`online:${address}`)
+    if (stillOnline) return
 
     // Re-read bet to confirm `other` is still the active participant
     const raw = await redis.get(`match:bet:${matchId}`)

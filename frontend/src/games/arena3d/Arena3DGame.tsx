@@ -9,7 +9,7 @@ import { ws } from '../../lib/ws'
 import type { MatchContext } from '../../types/match'
 
 const SYNC_INTERVAL = 16  // ms (~60 Hz)
-const DEAD = 18           // touch dead zone px
+const DEAD = 30           // touch dead zone px — 30px prevents jitter on real devices
 
 interface Props {
   matchCtx?: MatchContext
@@ -62,7 +62,7 @@ export default function Arena3DGame({ matchCtx, onWinner }: Props) {
     if (!container) return
 
     // Create scene
-    const scene = createScene(container)
+    const scene = createScene(container, isMobile)
     sceneRef.current = scene
     stateRef.current = initGame(mySlot)
     winnerSentRef.current = false
@@ -104,7 +104,7 @@ export default function Arena3DGame({ matchCtx, onWinner }: Props) {
         }
       }
 
-      const { next, didWin } = update(stateRef.current, dt, inp, oppPacketRef.current)
+      const { next } = update(stateRef.current, dt, inp, oppPacketRef.current)
       oppPacketRef.current = null
       stateRef.current = next
 
@@ -114,8 +114,7 @@ export default function Arena3DGame({ matchCtx, onWinner }: Props) {
         ws.send('game:state', { matchId: matchCtx.matchId, ...serializeState(next) })
       }
 
-      // Announce winner
-      if (didWin && !winnerSentRef.current && matchCtx) {
+      if (next.phase === 'gameOver' && !winnerSentRef.current && matchCtx) {
         winnerSentRef.current = true
         const addr = next.winner === 1 ? matchCtx.p1Address : matchCtx.p2Address
         onWinner?.(addr)
@@ -156,6 +155,8 @@ export default function Arena3DGame({ matchCtx, onWinner }: Props) {
   const leftZoneRef   = useRef<HTMLDivElement>(null)
   const rightZoneRef  = useRef<HTMLDivElement>(null)
   const reloadZoneRef = useRef<HTMLDivElement>(null)
+  const leftKnobRef   = useRef<HTMLDivElement>(null)
+  const rightKnobRef  = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!isMobile) return
@@ -167,10 +168,13 @@ export default function Arena3DGame({ matchCtx, onWinner }: Props) {
 
     const origins = new Map<number, { ox: number; oy: number; side: 'left' | 'right' }>()
 
+    const clampKnob = (v: number) => Math.min(Math.max(v, -28), 28)
+
     const onLeftStart = (e: TouchEvent) => {
       e.preventDefault()
       for (const t of Array.from(e.changedTouches))
         origins.set(t.identifier, { ox: t.clientX, oy: t.clientY, side: 'left' })
+      if (leftKnobRef.current) leftKnobRef.current.style.transform = ''
     }
     const onRightStart = (e: TouchEvent) => {
       e.preventDefault()
@@ -178,6 +182,7 @@ export default function Arena3DGame({ matchCtx, onWinner }: Props) {
         origins.set(t.identifier, { ox: t.clientX, oy: t.clientY, side: 'right' })
         inp.shooting = true
       }
+      if (rightKnobRef.current) rightKnobRef.current.style.transform = ''
     }
     const onReloadStart = (e: TouchEvent) => { e.preventDefault(); inp.reloading = true }
     const onReloadEnd   = (e: TouchEvent) => { e.preventDefault(); inp.reloading = false }
@@ -193,8 +198,12 @@ export default function Arena3DGame({ matchCtx, onWinner }: Props) {
           inp.right = dx >  DEAD
           inp.up    = dy < -DEAD
           inp.down  = dy >  DEAD
+          if (leftKnobRef.current)
+            leftKnobRef.current.style.transform = `translate(${clampKnob(dx)}px,${clampKnob(dy)}px)`
         } else {
           if (Math.hypot(dx, dy) > DEAD) inp.rotY = Math.atan2(dx, dy)
+          if (rightKnobRef.current)
+            rightKnobRef.current.style.transform = `translate(${clampKnob(dx)}px,${clampKnob(dy)}px)`
         }
       }
     }
@@ -204,8 +213,13 @@ export default function Arena3DGame({ matchCtx, onWinner }: Props) {
         const o = origins.get(t.identifier)
         origins.delete(t.identifier)
         if (!o) continue
-        if (o.side === 'left')      { inp.left = inp.right = inp.up = inp.down = false }
-        else if (![...origins.values()].some(v => v.side === 'right')) inp.shooting = false
+        if (o.side === 'left') {
+          inp.left = inp.right = inp.up = inp.down = false
+          if (leftKnobRef.current) leftKnobRef.current.style.transform = ''
+        } else {
+          if (![...origins.values()].some(v => v.side === 'right')) inp.shooting = false
+          if (rightKnobRef.current) rightKnobRef.current.style.transform = ''
+        }
       }
     }
 
@@ -276,56 +290,68 @@ export default function Arena3DGame({ matchCtx, onWinner }: Props) {
           </div>
         )}
 
-        {displayPhase === 'gameOver' && (
+        {displayPhase === 'gameOver' && !matchCtx && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/60">
             <span className="font-px text-[14px] text-white tracking-widest" style={{ textShadow: '0 0 20px rgba(0,212,255,0.8)' }}>
               {stateRef.current.winner === mySlot ? 'YOU WIN!' : 'GAME OVER'}
             </span>
-            {!matchCtx && (
-              <button
-                onClick={restart}
-                className="font-px text-[8px] text-white bg-violet-700 hover:bg-violet-600 px-6 py-3
-                  shadow-[0_3px_0_#3b0f8a] active:translate-y-[3px] active:shadow-none transition-all"
-              >
-                PLAY AGAIN
-              </button>
-            )}
+            <button
+              onClick={restart}
+              className="font-px text-[8px] text-white bg-violet-700 hover:bg-violet-600 px-6 py-3
+                shadow-[0_3px_0_#3b0f8a] active:translate-y-[3px] active:shadow-none transition-all"
+            >
+              PLAY AGAIN
+            </button>
           </div>
         )}
       </div>
 
       {/* Mobile joysticks / desktop hint */}
       {isMobile ? (
-        <div className="flex w-full gap-2 px-2">
+        <div
+          className="flex w-full gap-2 px-2"
+          style={{ paddingBottom: 'env(safe-area-inset-bottom, 8px)' }}
+        >
+          {/* Left joystick — MOVE */}
           <div
             ref={leftZoneRef}
-            className="flex-1 h-28 rounded-xl border border-slate-700 bg-slate-900/60 flex flex-col items-center justify-center gap-1"
+            className="flex-1 h-36 rounded-xl border border-slate-700 bg-slate-900/60 relative"
             style={{ touchAction: 'none' }}
           >
-            <div className="w-10 h-10 rounded-full border border-slate-600 flex items-center justify-center">
-              <span className="font-px text-[5px] text-slate-400">+</span>
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="w-16 h-16 rounded-full border border-slate-700 opacity-40" />
             </div>
-            <span className="font-px text-[6px] text-slate-500 tracking-widest">MOVE</span>
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div ref={leftKnobRef} className="w-7 h-7 rounded-full bg-slate-600 border border-slate-400" />
+            </div>
+            <span className="absolute bottom-2 left-0 right-0 text-center font-px text-[6px] text-slate-500 tracking-widest pointer-events-none">MOVE</span>
           </div>
+
+          {/* Center — RELOAD */}
           <div
             ref={reloadZoneRef}
-            className="w-16 h-28 rounded-xl border border-slate-600 bg-slate-800/60 flex flex-col items-center justify-center gap-1"
+            className="w-16 h-36 rounded-xl border border-slate-600 bg-slate-800/60 flex flex-col items-center justify-center gap-1"
             style={{ touchAction: 'none' }}
           >
-            <span className="font-px text-[5px] text-slate-300 tracking-widest">
+            <span className="font-px text-[6px] text-slate-300 tracking-widest">
               {displayAmmo.reloading ? 'LOADING' : `${displayAmmo.ammo}/${MAX_AMMO}`}
             </span>
-            <span className="font-px text-[5px] text-slate-500 tracking-widest">RELOAD</span>
+            <span className="font-px text-[6px] text-slate-500 tracking-widest">RELOAD</span>
           </div>
+
+          {/* Right joystick — AIM + SHOOT */}
           <div
             ref={rightZoneRef}
-            className="flex-1 h-28 rounded-xl border border-slate-700 bg-slate-900/60 flex flex-col items-center justify-center gap-1"
+            className="flex-1 h-36 rounded-xl border border-slate-700 bg-slate-900/60 relative"
             style={{ touchAction: 'none' }}
           >
-            <div className="w-10 h-10 rounded-full border border-slate-600 flex items-center justify-center">
-              <span className="font-px text-[5px] text-slate-400">◎</span>
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="w-16 h-16 rounded-full border border-slate-700 opacity-40" />
             </div>
-            <span className="font-px text-[6px] text-slate-500 tracking-widest">AIM + SHOOT</span>
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div ref={rightKnobRef} className="w-7 h-7 rounded-full bg-slate-600 border border-slate-400" />
+            </div>
+            <span className="absolute bottom-2 left-0 right-0 text-center font-px text-[6px] text-slate-500 tracking-widest pointer-events-none">AIM · SHOOT</span>
           </div>
         </div>
       ) : (

@@ -55,7 +55,7 @@ interface MatchState {
   matchCtx: () => MatchContext | null
   setJoinTarget: (t: JoinTarget | null) => void
   create: (address: string, gameSlug: string, mode: GameMode, opts: { amount?: string; denom?: Denom; isPublic: boolean; opponent: string | null }) => Promise<void>
-  join: (address: string) => Promise<void>
+  join: (address: string, verifiedAmount?: string) => Promise<void>
   markReady: () => void
   announceWinner: (winner: string) => void
   reset: () => void
@@ -72,20 +72,12 @@ const clearWaitingTimer   = () => { clearTimeout(waitingTimer ?? undefined); wai
 const clearReconnectTimer = () => { clearTimeout(reconnectTimer ?? undefined); reconnectTimer = null }
 
 export const useMatchStore = create<MatchState>((set, get) => {
+  // ── Phase transitions ────────────────────────────────────────────────────────
+
   // Server confirmed match is live — update shareLink from server's path if provided
   ws.on('match:waiting', (data: unknown) => {
     const { sharePath } = data as { sharePath: string }
-    if (sharePath) set({ shareLink: window.location.origin + sharePath })
-  })
-
-  ws.on('match:opponent_joined', (data: unknown) => {
-    const { opponent } = data as { opponent: string }
-    clearWaitingTimer()
-    if (opponent) set({ opponentJoined: true, opponentAddress: opponent, phase: 'ready' })
-  })
-
-  ws.on('match:opponent_ready', () => {
-    set({ opponentReady: true })
+    if (sharePath) set({ shareLink: window.location.origin + import.meta.env.BASE_URL.replace(/\/$/, '') + sharePath })
   })
 
   ws.on('match:countdown', (data: unknown) => {
@@ -111,11 +103,13 @@ export const useMatchStore = create<MatchState>((set, get) => {
     set({ phase: 'playing', countdown: 0, mySlot, p1Address: p1, p2Address: p2, opponentAddress })
   })
 
-  ws.on('match:settling', () => {
-    const { myAddress, winner } = get()
-    // Loser doesn't need to wait for on-chain settlement — skip straight to complete
-    if (winner && winner !== myAddress) set({ phase: 'complete' })
-    else set({ phase: 'settling' })
+  ws.on('match:settling', (data: unknown) => {
+    const { winner } = data as { winner: string }
+    const { myAddress } = get()
+    // Loser skips straight to complete — only winner waits on chain settlement
+    // winner comes from server payload (not store) so this works for server-authoritative games too
+    if (winner && winner !== myAddress) set({ phase: 'complete', winner, iAmWinner: false })
+    else set({ phase: 'settling', winner: winner ?? null, iAmWinner: true })
   })
 
   ws.on('match:settled', (data: unknown) => {
@@ -127,6 +121,8 @@ export const useMatchStore = create<MatchState>((set, get) => {
     const { winner } = data as { winner: string }
     if (get().phase !== 'complete' && winner) set({ phase: 'complete', winner, iAmWinner: winner === get().myAddress })
   })
+
+  // ── Error terminals ──────────────────────────────────────────────────────────
 
   ws.on('match:error', (data: unknown) => {
     const { message } = data as { message: string }
@@ -146,6 +142,18 @@ export const useMatchStore = create<MatchState>((set, get) => {
     clearCountdown()
     clearWaitingTimer()
     set({ ...base })
+  })
+
+  // ── Opponent presence ────────────────────────────────────────────────────────
+
+  ws.on('match:opponent_joined', (data: unknown) => {
+    const { opponent } = data as { opponent: string }
+    clearWaitingTimer()
+    if (opponent) set({ opponentJoined: true, opponentAddress: opponent, phase: 'ready' })
+  })
+
+  ws.on('match:opponent_ready', () => {
+    set({ opponentReady: true })
   })
 
   ws.on('match:opponent_left', () => {
@@ -243,7 +251,7 @@ export const useMatchStore = create<MatchState>((set, get) => {
       }, 3_600_000)
     },
 
-    join: async (address) => {
+    join: async (address, verifiedAmount) => {
       const { joinTarget } = get()
       if (!joinTarget) return
       if (joinTarget.isCasual) {
@@ -251,9 +259,10 @@ export const useMatchStore = create<MatchState>((set, get) => {
         ws.send('match:casual_join', { matchId: joinTarget.matchId })
         // Server responds with match:opponent_joined → phase:'ready'
       } else {
-        set({ phase: 'joining', gameMode: 'competitive', myAddress: address, mySlot: 2, p2Address: address, matchId: joinTarget.matchId, gameSlug: joinTarget.gameSlug, amount: joinTarget.amount, denom: joinTarget.denom, error: null })
+        const amount = verifiedAmount ?? joinTarget.amount
+        set({ phase: 'joining', gameMode: 'competitive', myAddress: address, mySlot: 2, p2Address: address, matchId: joinTarget.matchId, gameSlug: joinTarget.gameSlug, amount, denom: joinTarget.denom, error: null })
         try {
-          await acceptMatch(address, joinTarget.matchId, joinTarget.amount, joinTarget.denom)
+          await acceptMatch(address, joinTarget.matchId, amount, joinTarget.denom)
           ws.send('match:join', { matchId: joinTarget.matchId, txHash: '' })
         } catch (e: unknown) {
           set({ phase: 'idle', gameMode: null, error: e instanceof Error ? e.message : 'Transaction failed' })
@@ -281,7 +290,7 @@ export const useMatchStore = create<MatchState>((set, get) => {
     },
 
     reset: () => {
-      const { phase, matchId, mySlot, opponentAddress, gameMode } = get()
+      const { phase, matchId, mySlot, opponentAddress } = get()
       clearCountdown()
       clearWaitingTimer()
       clearReconnectTimer()
@@ -291,8 +300,7 @@ export const useMatchStore = create<MatchState>((set, get) => {
           ws.send('match:cancel', { matchId })
         } else if (phase === 'ready' || phase === 'countdown') {
           ws.send('match:abort', { matchId })
-        } else if (phase === 'playing' && gameMode === 'competitive' && opponentAddress) {
-          // Self-forfeit: opponent wins the pot
+        } else if (phase === 'playing' && opponentAddress) {
           ws.send('game:over', { matchId, winner: opponentAddress })
         }
       }

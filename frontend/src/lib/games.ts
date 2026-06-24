@@ -18,6 +18,7 @@ export interface Game {
   players: string
   thumb?: string
   comingSoon?: boolean
+  serverAuthoritative: boolean  // true = server drives settlement; client onWinner is a no-op
   component: ComponentType<GameProps>
 }
 
@@ -28,7 +29,8 @@ export const GAMES: Game[] = [
     description: 'First to 5 kills in a 3D neon arena. WASD + mouse aim. Wager your ATOM.',
     category: 'Action',
     players: '1v1',
-    thumb: '/hackathon/assets/games/arena3d.jpg',
+    thumb: '/hackathon/assets/games/arena3d.svg',
+    serverAuthoritative: false,
     component: lazy(() => import('../games/arena3d/Arena3DGame')),
   },
   {
@@ -38,6 +40,7 @@ export const GAMES: Game[] = [
     category: 'Arcade',
     players: '1–2P',
     thumb: '/hackathon/assets/games/pacman.jpg',
+    serverAuthoritative: true,
     component: lazy(() => import('../games/pacman/PacManGame')),
   },
 ]

@@ -15,12 +15,12 @@ export interface SceneHandle {
   dispose: () => void
 }
 
-export function createScene(container: HTMLElement): SceneHandle {
+export function createScene(container: HTMLElement, mobile = false): SceneHandle {
   // ── Renderer ──────────────────────────────────────────────────────────────
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false })
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-  renderer.shadowMap.enabled = true
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap
+  // ponytail: cap pixel ratio lower on mobile — fewer fill-rate pixels, same gameplay
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, mobile ? 1.0 : 1.5))
+  // ponytail: shadows off — PCFSoftShadowMap kills 60fps; emissive materials still look great
   renderer.setClearColor(0x050810)
   // ponytail: canvas fills container via CSS; WebGL buffer sized by ResizeObserver
   renderer.domElement.style.width  = '100%'
@@ -46,13 +46,11 @@ export function createScene(container: HTMLElement): SceneHandle {
   resize(container.clientWidth, container.clientHeight)
 
   // ── Lights ────────────────────────────────────────────────────────────────
-  scene.add(new THREE.AmbientLight(0x1a1a2e, 3))
+  // ponytail: reduce ambient on mobile — fewer overdraw passes on fill-rate-bound GPUs
+  scene.add(new THREE.AmbientLight(0x1a1a2e, mobile ? 1.5 : 3))
 
   const sun = new THREE.DirectionalLight(0xffffff, 1.2)
   sun.position.set(8, 30, 12)
-  sun.castShadow = true
-  sun.shadow.mapSize.set(1024, 1024)
-  Object.assign(sun.shadow.camera, { near: 0.5, far: 120, left: -50, right: 50, top: 35, bottom: -35 })
   scene.add(sun)
 
   // Player point lights — follow each player to tint surroundings
@@ -67,13 +65,14 @@ export function createScene(container: HTMLElement): SceneHandle {
   const floorMat = new THREE.MeshStandardMaterial({ color: 0x080d18, roughness: 0.9, metalness: 0.1 })
   const floor = new THREE.Mesh(floorGeo, floorMat)
   floor.rotation.x = -Math.PI / 2
-  floor.receiveShadow = true
   scene.add(floor)
 
-  // Grid helper (neon tinted)
-  const grid = new THREE.GridHelper(80, 40, 0x112244, 0x0d1a2e)
-  grid.position.y = 0.01
-  scene.add(grid)
+  // Grid helper (neon tinted) — skipped on mobile: expensive geometry, saves ~30% draw time
+  if (!mobile) {
+    const grid = new THREE.GridHelper(80, 40, 0x112244, 0x0d1a2e)
+    grid.position.y = 0.01
+    scene.add(grid)
+  }
 
   // Neon border lines
   const hw = ARENA_W / 2 - 0.1, hd = ARENA_D / 2 - 0.1
@@ -98,12 +97,13 @@ export function createScene(container: HTMLElement): SceneHandle {
     const geo = new THREE.BoxGeometry(obs.hw * 2, 2, obs.hd * 2)
     const mesh = new THREE.Mesh(geo, obsMat)
     mesh.position.set(obs.cx, 1, obs.cz)
-    mesh.castShadow = true
-    mesh.receiveShadow = true
     scene.add(mesh)
-    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo), obsEdgeMat)
-    edges.position.set(obs.cx, 1, obs.cz)
-    scene.add(edges)
+    // ponytail: skip edge lines on mobile — each LineSegments is a draw call, 15 obstacles = 15 saved
+    if (!mobile) {
+      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo), obsEdgeMat)
+      edges.position.set(obs.cx, 1, obs.cz)
+      scene.add(edges)
+    }
   }
 
   // ── Player meshes ─────────────────────────────────────────────────────────
@@ -115,7 +115,6 @@ export function createScene(container: HTMLElement): SceneHandle {
     })
     const body = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 1.6, 16), bodyMat)
     body.position.y = 0.8
-    body.castShadow = true
     group.add(body)
 
     // Gun barrel pointing in local +Z direction
@@ -152,37 +151,46 @@ export function createScene(container: HTMLElement): SceneHandle {
   scene.add(p1Ring, p2Ring)
 
   // ── Bullet pool ───────────────────────────────────────────────────────────
-  const bulletGeo = new THREE.SphereGeometry(0.28, 6, 6)
-  const myBulletMat  = new THREE.MeshStandardMaterial({ color: P1_HEX, emissive: P1_HEX, emissiveIntensity: 3 })
-  const oppBulletMat = new THREE.MeshStandardMaterial({ color: P2_HEX, emissive: P2_HEX, emissiveIntensity: 3 })
+  // ponytail: pre-allocate all bullet meshes once — zero GC during gameplay
+  const bulletGeo   = new THREE.SphereGeometry(0.28, 6, 6)
+  const p1BulletMat = new THREE.MeshStandardMaterial({ color: P1_HEX, emissive: P1_HEX, emissiveIntensity: 3 })
+  const p2BulletMat = new THREE.MeshStandardMaterial({ color: P2_HEX, emissive: P2_HEX, emissiveIntensity: 3 })
 
-  const myBulletMeshes  = new Map<number, THREE.Mesh>()
-  const oppBulletMeshes = new Map<number, THREE.Mesh>()
+  const POOL_SIZE = 20  // 8 max ammo per player × 2 sides + headroom
+
+  function makePool(mat: THREE.Material): THREE.Mesh[] {
+    return Array.from({ length: POOL_SIZE }, () => {
+      const m = new THREE.Mesh(bulletGeo, mat)
+      m.visible = false
+      m.position.y = 0.9
+      scene.add(m)
+      return m
+    })
+  }
+
+  const p1BulletPool = makePool(p1BulletMat)
+  const p2BulletPool = makePool(p2BulletMat)
+  const myBulletActive  = new Map<number, THREE.Mesh>()
+  const oppBulletActive = new Map<number, THREE.Mesh>()
 
   function syncBullets(
     live: { id: number; x: number; z: number }[],
-    pool: Map<number, THREE.Mesh>,
-    mat: THREE.Material,
-    mySlotColor: boolean,
-    mySlot: 1 | 2,
+    active: Map<number, THREE.Mesh>,
+    pool: THREE.Mesh[],
   ) {
     const liveIds = new Set(live.map(b => b.id))
-    // Remove stale
-    for (const [id, mesh] of pool) {
-      if (!liveIds.has(id)) { scene.remove(mesh); pool.delete(id) }
+    for (const [id, mesh] of active) {
+      if (!liveIds.has(id)) { mesh.visible = false; active.delete(id) }
     }
-    // Create/update
     for (const b of live) {
-      if (!pool.has(b.id)) {
-        // ponytail: shared geometry is fine — Three.js handles it
-        const mesh = new THREE.Mesh(bulletGeo, mat)
-        mesh.position.y = 0.9
-        scene.add(mesh)
-        pool.set(b.id, mesh)
+      if (!active.has(b.id)) {
+        const free = pool.find(m => !m.visible)
+        if (!free) continue  // ponytail: pool exhausted — drop bullet visually, physics still runs
+        free.visible = true
+        active.set(b.id, free)
       }
-      pool.get(b.id)!.position.set(b.x, 0.9, b.z)
+      active.get(b.id)!.position.set(b.x, 0.9, b.z)
     }
-    void mySlotColor; void mySlot // used only to determine which mat to pass in
   }
 
   // ── Mouse raycasting ──────────────────────────────────────────────────────
@@ -241,25 +249,23 @@ export function createScene(container: HTMLElement): SceneHandle {
     p1Light.intensity = p1Player.alive ? 1.2 : 0.2
     p2Light.intensity = p2Player.alive ? 1.2 : 0.2
 
-    // Swap bullet materials based on mySlot
-    const myMat  = mySlot === 1 ? myBulletMat  : oppBulletMat
-    const oppMat = mySlot === 1 ? oppBulletMat : myBulletMat
-
-    syncBullets(state.myBullets,  myBulletMeshes,  myMat,  true,  mySlot)
-    syncBullets(state.oppBullets, oppBulletMeshes, oppMat, false, mySlot)
+    const myPool  = mySlot === 1 ? p1BulletPool : p2BulletPool
+    const oppPool = mySlot === 1 ? p2BulletPool : p1BulletPool
+    syncBullets(state.myBullets,  myBulletActive,  myPool)
+    syncBullets(state.oppBullets, oppBulletActive, oppPool)
 
     renderer.render(scene, camera)
   }
 
   // ── Dispose ───────────────────────────────────────────────────────────────
   function dispose() {
-    for (const m of myBulletMeshes.values())  scene.remove(m)
-    for (const m of oppBulletMeshes.values()) scene.remove(m)
-    myBulletMeshes.clear()
-    oppBulletMeshes.clear()
+    for (const m of p1BulletPool) scene.remove(m)
+    for (const m of p2BulletPool) scene.remove(m)
+    myBulletActive.clear()
+    oppBulletActive.clear()
     bulletGeo.dispose()
-    myBulletMat.dispose()
-    oppBulletMat.dispose()
+    p1BulletMat.dispose()
+    p2BulletMat.dispose()
     ;(p1Ring.material as THREE.MeshBasicMaterial).dispose()
     ;(p2Ring.material as THREE.MeshBasicMaterial).dispose()
     renderer.dispose()

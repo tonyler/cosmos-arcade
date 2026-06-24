@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { TILE, COLS, ROWS, initGame, update, nextRound, createInputHandler, type GameState, type Dir } from './engine'
 import { render } from './renderer'
 import { ws } from '../../lib/ws'
@@ -8,6 +8,8 @@ import { useCanvasScale } from '../../hooks/useCanvasScale'
 const W = COLS * TILE  // 448
 const H = ROWS * TILE  // 496
 const MAX_SCALE = 1.5
+// ponytail: detect once at load — matchMedia is stable for the session
+const isMobileDevice = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches
 
 interface Props {
   matchCtx?: MatchContext
@@ -26,9 +28,30 @@ export default function PacManGame({ matchCtx, onWinner: _onWinner }: Props) {
   const [displayState, setDisplayState] = useState(stateRef.current)
   const [restartKey, setRestartKey] = useState(0)
   const [matchWinner, setMatchWinner] = useState<1 | 2 | null>(null)
-  const scale = useCanvasScale(MAX_SCALE, W, H, 140)
+  // Reserve extra height on mobile for D-pad below canvas
+  const scale = useCanvasScale(MAX_SCALE, W, H, isMobileDevice ? 300 : 140)
 
   const restart = () => setRestartKey((k) => k + 1)
+
+  // Lock body scroll on mobile so swipes don't scroll the page / trigger pull-to-refresh
+  useEffect(() => {
+    if (!isMobileDevice) return
+    document.body.style.overflow = 'hidden'
+    document.body.style.touchAction = 'none'
+    return () => {
+      document.body.style.overflow = ''
+      document.body.style.touchAction = ''
+    }
+  }, [])
+
+  // Stable dir handler — used by both swipe (desktop fallback) and D-pad (mobile)
+  const handleDir = (dir: Dir) => {
+    if (matchCtx) {
+      ws.send('game:input', { matchId: matchCtx.matchId, slot: matchCtx.mySlot, dir })
+    } else {
+      inputRef.current.state.p1Dir = dir
+    }
+  }
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -39,7 +62,7 @@ export default function PacManGame({ matchCtx, onWinner: _onWinner }: Props) {
     winnerSentRef.current = false
     setMatchWinner(null)
 
-    // ── Swipe controls ──────────────────────────────────────────────────────
+    // ── Swipe controls (desktop/non-touch fallback — D-pad handles mobile) ──
     let touchStartX = 0
     let touchStartY = 0
     const onTouchStart = (e: TouchEvent) => {
@@ -51,21 +74,15 @@ export default function PacManGame({ matchCtx, onWinner: _onWinner }: Props) {
       e.preventDefault()
       const dx = e.changedTouches[0].clientX - touchStartX
       const dy = e.changedTouches[0].clientY - touchStartY
-      if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return
-      let dir: Dir
-      if (Math.abs(dx) > Math.abs(dy)) dir = dx > 0 ? 1 : 3
-      else dir = dy > 0 ? 2 : 0
-
-      if (matchCtx) {
-        ws.send('game:input', { matchId: matchCtx.matchId, slot: matchCtx.mySlot, dir })
-      } else {
-        const useP2 = false
-        if (useP2) inputRef.current.state.p2Dir = dir
-        else inputRef.current.state.p1Dir = dir
-      }
+      if (Math.abs(dx) < 30 && Math.abs(dy) < 30) return
+      const dir: Dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 1 : 3) : (dy > 0 ? 2 : 0)
+      handleDir(dir)
     }
-    canvas.addEventListener('touchstart', onTouchStart, { passive: false })
-    canvas.addEventListener('touchend', onTouchEnd, { passive: false })
+    // On mobile, D-pad handles input — swipe on canvas conflicts with scroll gestures
+    if (!isMobileDevice) {
+      canvas.addEventListener('touchstart', onTouchStart, { passive: false })
+      canvas.addEventListener('touchend', onTouchEnd, { passive: false })
+    }
 
     let offWs: (() => void) | undefined
 
@@ -145,8 +162,10 @@ export default function PacManGame({ matchCtx, onWinner: _onWinner }: Props) {
       cancelAnimationFrame(rafRef.current)
       detach()
       offWs?.()
-      canvas.removeEventListener('touchstart', onTouchStart)
-      canvas.removeEventListener('touchend', onTouchEnd)
+      if (!isMobileDevice) {
+        canvas.removeEventListener('touchstart', onTouchStart)
+        canvas.removeEventListener('touchend', onTouchEnd)
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [matchCtx?.matchId, restartKey])
@@ -172,13 +191,12 @@ export default function PacManGame({ matchCtx, onWinner: _onWinner }: Props) {
   }, [matchCtx?.matchId])
 
   const { p1, p2, level, p1Wins, p2Wins } = displayState
-  const isMobile = scale < MAX_SCALE
 
   const p1Label = matchCtx ? (matchCtx.mySlot === 1 ? 'YOU' : 'OPPONENT') : 'P1'
   const p2Label = matchCtx ? (matchCtx.mySlot === 2 ? 'YOU' : 'OPPONENT') : 'P2'
 
   return (
-    <div className="flex flex-col items-center gap-3 py-3 md:gap-6 md:py-6">
+    <div className="flex flex-col items-center gap-3 py-3 md:gap-6 md:py-6" style={isMobileDevice ? { touchAction: 'none' } : undefined}>
       {/* HUD */}
       <div className="flex items-start justify-between w-full px-2" style={{ maxWidth: W * scale }}>
         <PlayerHUD label={p1Label} score={p1.score} color="#ffe000" powered={p1.powered} alive={p1.alive} wins={p1Wins} />
@@ -215,21 +233,19 @@ export default function PacManGame({ matchCtx, onWinner: _onWinner }: Props) {
         )}
       </div>
 
-      {/* Controls legend */}
-      <div className="flex gap-6 opacity-50">
-        {isMobile ? (
-          <span className="font-px text-[7px] text-slate-400 tracking-widest">SWIPE TO MOVE</span>
-        ) : (
-          <>
-            {(!matchCtx || matchCtx.mySlot === 1) && (
-              <Legend label={matchCtx ? 'MOVE' : 'P1'} keys={['↑', '←', '↓', '→']} color="#ffe000" />
-            )}
-            {(!matchCtx || matchCtx.mySlot === 2) && (
-              <Legend label={matchCtx ? 'MOVE' : 'P2'} keys={['W', 'A', 'S', 'D']} color="#00d4ff" />
-            )}
-          </>
-        )}
-      </div>
+      {/* D-pad (mobile) or keyboard legend (desktop) */}
+      {isMobileDevice ? (
+        <DPad onDir={handleDir} />
+      ) : (
+        <div className="flex gap-6 opacity-50">
+          {(!matchCtx || matchCtx.mySlot === 1) && (
+            <Legend label={matchCtx ? 'MOVE' : 'P1'} keys={['↑', '←', '↓', '→']} color="#ffe000" />
+          )}
+          {(!matchCtx || matchCtx.mySlot === 2) && (
+            <Legend label={matchCtx ? 'MOVE' : 'P2'} keys={['W', 'A', 'S', 'D']} color="#00d4ff" />
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -266,6 +282,31 @@ function Legend({ label, keys, color }: { label: string; keys: string[]; color: 
           <kbd key={k} className="font-px text-[7px] bg-c-surface border border-c-border px-1.5 py-0.5 text-slate-300">{k}</kbd>
         ))}
       </div>
+    </div>
+  )
+}
+
+function DPad({ onDir }: { onDir: (dir: Dir) => void }) {
+  const btn = (dir: Dir, label: string, pos: CSSProperties) => (
+    <button
+      key={dir}
+      style={{ ...pos, position: 'absolute', width: 56, height: 56 }}
+      className="rounded-xl border border-slate-600 bg-slate-800/80 active:bg-slate-700
+        flex items-center justify-center font-px text-[11px] text-slate-300 select-none"
+      onTouchStart={(e) => { e.preventDefault(); onDir(dir) }}
+      onMouseDown={(e) => { e.preventDefault(); onDir(dir) }}
+    >
+      {label}
+    </button>
+  )
+  return (
+    <div className="relative select-none" style={{ width: 168, height: 168, paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+      {btn(0, '▲', { top: 0,    left: '50%', transform: 'translateX(-50%)' })}
+      {btn(3, '◀', { top: '50%', left: 0,   transform: 'translateY(-50%)' })}
+      {btn(2, '▼', { bottom: 0, left: '50%', transform: 'translateX(-50%)' })}
+      {btn(1, '▶', { top: '50%', right: 0,  transform: 'translateY(-50%)' })}
+      <div className="absolute rounded-full border border-slate-700 bg-slate-900"
+        style={{ width: 32, height: 32, top: '50%', left: '50%', transform: 'translate(-50%,-50%)' }} />
     </div>
   )
 }

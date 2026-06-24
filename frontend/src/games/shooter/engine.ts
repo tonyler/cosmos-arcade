@@ -188,6 +188,11 @@ export function update(
   const prevOppKills = s.oppPlayer.kills
   if (oppPacket) s = applyOppPacket(s, oppPacket, true)
 
+  // Opponent reached kill limit — they win
+  if (s.oppPlayer.kills >= KILL_LIMIT && s.phase === 'playing') {
+    return { next: { ...s, phase: 'gameOver', winner: s.mySlot === 1 ? 2 : 1, message: 'GAME OVER' }, didKill: false, didWin: false }
+  }
+
   // Opponent killed me (their kills went up)
   if (s.oppPlayer.kills > prevOppKills && s.myPlayer.alive) {
     s.myPlayer = { ...s.myPlayer, alive: false, respawnTimer: RESPAWN_TIME }

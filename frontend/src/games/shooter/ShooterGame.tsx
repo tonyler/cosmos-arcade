@@ -75,7 +75,7 @@ export default function ShooterGame({ matchCtx, onWinner }: Props) {
         )
       }
 
-      const { next, didWin } = update(s, dt, inp, oppPacketRef.current)
+      const { next } = update(s, dt, inp, oppPacketRef.current)
       oppPacketRef.current = null  // consume packet
       stateRef.current = next
 
@@ -85,10 +85,9 @@ export default function ShooterGame({ matchCtx, onWinner }: Props) {
         ws.send('game:state', { matchId: matchCtx.matchId, ...serializeState(next) })
       }
 
-      // Announce winner
-      if (didWin && !winnerSentRef.current) {
+      if (next.phase === 'gameOver' && !winnerSentRef.current && matchCtx) {
         winnerSentRef.current = true
-        const addr = next.winner === 1 ? matchCtx!.p1Address : matchCtx!.p2Address
+        const addr = next.winner === 1 ? matchCtx.p1Address : matchCtx.p2Address
         onWinner?.(addr)
       }
 

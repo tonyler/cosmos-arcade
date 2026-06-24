@@ -21,7 +21,7 @@ export default function GamePage({ slug }: Props) {
   const GameComponent = game?.component
 
   return (
-    <div className="relative flex flex-col items-center justify-center h-full font-ui text-slate-200 overflow-hidden">
+    <div className="relative flex flex-col items-center h-full font-ui text-slate-200 overflow-hidden">
 
       {/* Background — same as landing page */}
       <div className="absolute inset-0 pointer-events-none select-none">
@@ -53,7 +53,7 @@ export default function GamePage({ slug }: Props) {
       )}
 
       {/* Game area */}
-      <div className="relative w-full flex justify-center px-2 md:px-6 overflow-hidden">
+      <div className="relative flex-1 min-h-0 w-full flex items-center justify-center px-2 md:px-6 overflow-hidden">
         <Suspense fallback={<GameLoader />}>
           {GameComponent
             ? <GameComponent matchCtx={ctx ?? undefined} onWinner={announceWinner} />

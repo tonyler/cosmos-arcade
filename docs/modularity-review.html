@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Modularity Review — Cosmos Arcade</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  :root {
+    --bg: #0d0f14;
+    --surface: #161920;
+    --border: #1e2330;
+    --text: #c9d1e0;
+    --muted: #5a6480;
+    --violet: #a78bfa;
+    --red: #f87171;
+    --amber: #fbbf24;
+    --green: #34d399;
+    --blue: #60a5fa;
+    --code-bg: #111420;
+  }
+  body { margin: 0; padding: 2rem 1rem 5rem; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 15px; line-height: 1.7; }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  h1 { font-size: 1.6rem; font-weight: 700; color: #e2e8f0; margin-bottom: 0.2rem; }
+  .subtitle { color: var(--muted); font-size: 0.85rem; margin-bottom: 3rem; }
+  h2 { font-size: 1.05rem; font-weight: 600; color: #e2e8f0; margin: 2.5rem 0 0.75rem; letter-spacing: 0.01em; }
+  h3 { font-size: 0.95rem; font-weight: 600; color: #e2e8f0; margin: 2rem 0 0.6rem; }
+  p { margin: 0.6rem 0; color: var(--text); }
+
+  /* Severity badges */
+  .badge { display: inline-block; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.05em; padding: 0.15rem 0.5rem; border-radius: 3px; margin-left: 0.5rem; vertical-align: middle; }
+  .critical { background: rgba(248,113,113,0.15); color: var(--red); border: 1px solid rgba(248,113,113,0.3); }
+  .high     { background: rgba(251,191,36,0.12); color: var(--amber); border: 1px solid rgba(251,191,36,0.3); }
+  .moderate { background: rgba(96,165,250,0.12); color: var(--blue); border: 1px solid rgba(96,165,250,0.3); }
+  .low      { background: rgba(90,100,128,0.2); color: var(--muted); border: 1px solid rgba(90,100,128,0.3); }
+  .healthy  { background: rgba(52,211,153,0.1); color: var(--green); border: 1px solid rgba(52,211,153,0.3); }
+
+  /* Issue cards */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 1.5rem 1.75rem; margin: 1.25rem 0; }
+  .card.is-critical { border-left: 3px solid var(--red); }
+  .card.is-high     { border-left: 3px solid var(--amber); }
+  .card.is-moderate { border-left: 3px solid var(--blue); }
+  .card.is-low      { border-left: 3px solid var(--muted); }
+  .card.is-healthy  { border-left: 3px solid var(--green); }
+  .card-title { font-size: 0.95rem; font-weight: 600; color: #e2e8f0; margin: 0 0 0.75rem; }
+
+  /* Code blocks */
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 4px; padding: 1rem 1.25rem; overflow-x: auto; margin: 0.75rem 0; }
+  code { font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace; font-size: 0.82rem; color: #a5b4fc; }
+  p code { background: var(--code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.83rem; color: #a5b4fc; }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.875rem; }
+  th { text-align: left; color: var(--muted); font-size: 0.75rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; padding: 0.5rem 1rem 0.5rem 0; border-bottom: 1px solid var(--border); }
+  td { padding: 0.6rem 1rem 0.6rem 0; border-bottom: 1px solid rgba(30,35,48,0.7); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+
+  /* Section divider */
+  hr { border: none; border-top: 1px solid var(--border); margin: 3rem 0; }
+
+  /* Inline highlight labels */
+  .label { display: inline-block; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); margin-right: 0.4rem; }
+
+  .dimension-row { display: flex; gap: 1.5rem; margin: 0.75rem 0; flex-wrap: wrap; }
+  .dim { background: var(--code-bg); border: 1px solid var(--border); border-radius: 4px; padding: 0.3rem 0.75rem; font-size: 0.78rem; }
+  .dim strong { color: #e2e8f0; }
+  .dim span { color: var(--muted); margin-right: 0.3rem; }
+
+  blockquote { border-left: 3px solid var(--violet); margin: 1rem 0; padding: 0.5rem 0 0.5rem 1.25rem; color: var(--muted); font-style: italic; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Modularity Review</h1>
+  <p class="subtitle">Cosmos Arcade · Balanced Coupling Analysis · June 2026</p>
+
+  <!-- Component Map -->
+  <h2>Component Map</h2>
+  <table>
+    <thead><tr><th>Component</th><th>Domain</th><th>Responsibility</th></tr></thead>
+    <tbody>
+      <tr><td><code>contracts/escrow</code></td><td>Supporting</td><td>On-chain fund locking, settlement, refunds. Immutable once deployed.</td></tr>
+      <tr><td><code>server/ws/handlers/match.ts</code></td><td><strong>Core</strong></td><td>Match orchestration, countdown, game relay, winner consensus</td></tr>
+      <tr><td><code>server/chain/settlement.ts</code></td><td>Supporting (glue)</td><td>Translates server intent into on-chain messages</td></tr>
+      <tr><td><code>frontend/store/matchStore</code></td><td><strong>Core</strong></td><td>Client-side match state machine, WS event subscribers</td></tr>
+      <tr><td><code>frontend/plugins/MatchGate</code></td><td><strong>Core</strong></td><td>Pre-game flow UI — mode selection, wager, ready handshake</td></tr>
+      <tr><td><code>frontend/plugins/MatchSettler</code></td><td><strong>Core</strong></td><td>Post-game overlay — settlement status, disputes</td></tr>
+      <tr><td><code>frontend/lib/escrow.ts</code></td><td>Supporting (glue)</td><td>Frontend CosmWasm client — players lock funds directly via Keplr</td></tr>
+      <tr><td><code>frontend/games/*/engine</code></td><td><strong>Core</strong></td><td>Pure game logic — no external dependencies</td></tr>
+      <tr><td>Chat, Lobby, Username</td><td>Generic</td><td>Standard social features, low volatility</td></tr>
+    </tbody>
+  </table>
+
+  <hr>
+
+  <!-- Critical Issues -->
+  <h2>Critical Issues</h2>
+
+  <div class="card is-critical">
+    <p class="card-title">I2 — Three Parallel State Machines with No Shared Contract <span class="badge critical">CRITICAL</span></p>
+
+    <p><span class="label">What is shared</span> The semantics of the match lifecycle — what states exist, what transitions are valid, and what each state means to the business.</p>
+
+    <p><span class="label">How it is shared</span> Implicitly. There is no single canonical type. Each layer defines its own enumeration independently:</p>
+
+    <pre><code>Contract (Rust)     → Pending | Active | Complete | Refunded | Cancelled            (5 states)
+Server Redis (TS)   → waiting | joined | active | settling | complete |             (9 states)
+                       settlement_failed | disputed | abort_failed | cancelled
+Frontend Zustand    → idle | creating | waiting | joining | ready | countdown |     (11 states)
+                       playing | settling | complete | settlement_failed | disputed</code></pre>
+
+    <div class="dimension-row">
+      <div class="dim"><span>Strength</span><strong>Functional (implicit)</strong></div>
+      <div class="dim"><span>Distance</span><strong>High — cross-system + cross-process</strong></div>
+      <div class="dim"><span>Volatility</span><strong>HIGH — core domain, stated pain point</strong></div>
+    </div>
+
+    <p>The match lifecycle is the core subdomain of this application. Yet the three components that implement it share no typed boundary. The coupling is implicit: each layer assumes the others agree on the meaning of each state, but nothing enforces that agreement.</p>
+
+    <p>The distance makes this worse. Contract ↔ server is a system boundary (blockchain ↔ Node.js). Server ↔ frontend is a process boundary (WebSocket). At each boundary, the implicit contract is "we both know what <code>settling</code> means." When you add a new phase — <code>rematch_pending</code>, <code>tournament_queued</code> — you add it to all three independently, with no compiler telling you when you've missed one. You named adding match modes as your primary pain point. This is the structural cause.</p>
+
+    <p><span class="label">Recommended direction</span> Define a single canonical match status type that all three reference. The server ↔ frontend gap is addressable immediately with no new infrastructure:</p>
+
+    <pre><code>// shared/match-protocol.ts — one source of truth
+export const MATCH_STATUS = {
+  WAITING:            'waiting',
+  JOINED:             'joined',
+  ACTIVE:             'active',
+  SETTLING:           'settling',
+  COMPLETE:           'complete',
+  SETTLEMENT_FAILED:  'settlement_failed',
+  DISPUTED:           'disputed',
+} as const
+export type MatchStatus = typeof MATCH_STATUS[keyof typeof MATCH_STATUS]</code></pre>
+
+    <p>Server <code>Bet.status</code> and frontend <code>matchStore.phase</code> both import from this. The contract's status strings are then validated at the server's CosmWasm response boundary — one explicit assertion point, not three silent assumptions.</p>
+  </div>
+
+  <div class="card is-high">
+    <p class="card-title">I1 — WebSocket Event Protocol as an Implicit 30-Event Schema <span class="badge high">HIGH</span></p>
+
+    <p><span class="label">What is shared</span> The entire operational protocol between server and frontend — 30+ event type strings, each with its own payload shape, each encoding assumptions about what data will be present.</p>
+
+    <p><span class="label">How it is shared</span> By convention. The server emits:</p>
+    <pre><code>send(creator, 'match:begin', { matchId, p1: activeBet.creator, p2: activeBet.opponent })</code></pre>
+    <p>The frontend receives:</p>
+    <pre><code>ws.on('match:begin', (raw) => {
+  const data = raw as { p1: string; p2: string }
+  // ...
+})</code></pre>
+
+    <div class="dimension-row">
+      <div class="dim"><span>Strength</span><strong>Functional</strong></div>
+      <div class="dim"><span>Distance</span><strong>Moderate — different processes</strong></div>
+      <div class="dim"><span>Volatility</span><strong>HIGH — grows with every new feature</strong></div>
+    </div>
+
+    <p>There is no schema, no contract file, no generated types. The <code>as { p1: string; p2: string }</code> cast is a runtime assumption, not a compile-time check. Adding a field, renaming a key, or adding a new event requires manual search across two codebases. Mismatches surface at runtime.</p>
+
+    <p>This is also where game plugging costs compound: a new game type that needs custom WS coordination (e.g., a turn-based game needing <code>game:turn_change</code>) has no typed place to register that contract.</p>
+
+    <p><span class="label">Recommended direction</span> A single shared protocol definition, importable by both sides:</p>
+
+    <pre><code>// server/src/ws/protocol.ts (or a shared workspace package)
+export interface WsEvents {
+  'match:begin':           { matchId: string; p1: string; p2: string }
+  'match:opponent_joined': { matchId: string; opponent: string }
+  'match:countdown':       { matchId: string; seconds: number }
+  'game:state':            { matchId: string; [key: string]: unknown }
+  // ...
+}</code></pre>
+
+    <p>Type the server's <code>send()</code> function and frontend's <code>ws.on()</code> against this map. You get autocomplete on event names and payload shapes, and a compiler error when they diverge. This is additive — it formalises what already implicitly exists.</p>
+  </div>
+
+  <hr>
+
+  <!-- Moderate -->
+  <h2>Moderate Issues</h2>
+
+  <div class="card is-moderate">
+    <p class="card-title">I6 — Winner Consensus Logic Inside the Transport Handler <span class="badge moderate">MODERATE</span></p>
+
+    <p><code>handleGameOver</code> / <code>doSettle</code> / <code>markDisputed</code> in <code>ws/handlers/match.ts</code> (lines 302–369) implement the core competitive rule: both players must report the same winner within 10 seconds, or the match is disputed. This is a meaningful business rule — the timeout duration, the NX gate, and the dispute condition are design choices that will change as the platform grows.</p>
+
+    <div class="dimension-row">
+      <div class="dim"><span>Strength</span><strong>Intrusive — transport ↔ business logic mixed</strong></div>
+      <div class="dim"><span>Distance</span><strong>Low — same file</strong></div>
+      <div class="dim"><span>Volatility</span><strong>HIGH — consensus rules are core</strong></div>
+    </div>
+
+    <p>These 70 lines live inside the WebSocket handler, directly interleaved with Redis calls, message routing (<code>send()</code>), and telemetry. The consensus logic cannot be invoked or tested without a live WS connection and Redis instance. Changing the resolution strategy — adding a trusted arbiter for tournament disputes, adjusting the timeout per game type — requires modifying a function that is simultaneously responsible for transport, state mutation, and business logic.</p>
+
+    <p>The low distance keeps this from being critical — it is co-located and will co-evolve. But it is the structural bottleneck for competitive mode evolution.</p>
+
+    <p><span class="label">Recommended direction</span> Extract the consensus decision to a pure function:</p>
+
+    <pre><code>// ws/handlers/consensus.ts
+export function evaluateGameOver(
+  from: string,
+  winner: string,
+  otherReport: string | null,
+  bet: Bet
+): { action: 'settle' | 'dispute' | 'wait'; winner?: string }</code></pre>
+
+    <p>The handler calls this and acts on the decision. The consensus rules become testable and changeable without touching the transport layer. This is a ~30-line extraction.</p>
+  </div>
+
+  <hr>
+
+  <!-- Notable -->
+  <h2>Notable — Low Volatility Saves It</h2>
+
+  <div class="card is-low">
+    <p class="card-title">I3 — Dual Contract Clients Without Shared Types <span class="badge low">LOW</span></p>
+
+    <p><code>frontend/lib/escrow.ts</code> and <code>server/chain/settlement.ts</code> both independently encode the CosmWasm <code>ExecuteMsg</code> interface as plain JavaScript objects. The Rust source is the authoritative schema; neither TypeScript file references it.</p>
+
+    <div class="dimension-row">
+      <div class="dim"><span>Strength</span><strong>Model — duplicated knowledge</strong></div>
+      <div class="dim"><span>Distance</span><strong>High — cross-system</strong></div>
+      <div class="dim"><span>Volatility</span><strong>LOW — contract is stable once deployed</strong></div>
+    </div>
+
+    <p>Model coupling at cross-system distance is technically unbalanced, but low volatility saves it. CosmWasm contracts are effectively immutable without migration. The message shapes are small and stable. The risk is low unless a migration or new execute variant is planned.</p>
+
+    <p><span class="label">When this becomes a problem</span> Contract migration, adding a new execute variant, or introducing a second contract. At that point, the absence of shared types will cause missed updates in one client.</p>
+
+    <p><span class="label">Recommended direction</span> Nothing urgent. When the next contract change is needed, co-locate a <code>contract-interface.ts</code> that both clients import. Many CosmWasm projects generate these from the schema JSON — worth exploring at migration time.</p>
+  </div>
+
+  <hr>
+
+  <!-- Healthy Patterns -->
+  <h2>Healthy Patterns</h2>
+
+  <div class="card is-healthy">
+    <p class="card-title">GameProps — A Minimal Contract Boundary <span class="badge healthy">HEALTHY</span></p>
+
+    <pre><code>interface GameProps {
+  matchCtx?: MatchContext
+  onWinner?: (addr: string) => void
+}</code></pre>
+
+    <p>This two-field interface is the entire coupling surface between the match system and any game. Game engines are pure functions with zero external imports. <code>PacManGame</code> and <code>ShooterGame</code> do not know what a <code>matchStore</code> is. Adding a new game requires implementing the engine, registering it in <code>games.ts</code>, and nothing else.</p>
+
+    <p>The <code>onWinner</code> callback is particularly clean: the game reports a fact ("player at this address won"), and the match system decides what to do about it. Games have no knowledge of wallets, WebSockets, or settlement. This is contract coupling at low distance — exactly right for a moderately volatile integration.</p>
+  </div>
+
+  <div class="card is-healthy">
+    <p class="card-title">In-Memory Match Map for the Hot Path <span class="badge healthy">HEALTHY</span></p>
+
+    <p>During an active game, state packets and input events are relayed through an in-memory <code>Map&lt;matchId, Match&gt;</code> with no Redis hop. Only the match lifecycle (create, join, settle) touches Redis. This is the right partition: volatile, high-frequency game data stays local; durable match state is persisted. The design will not require change when throughput grows — game relay is already O(1) with no I/O.</p>
+  </div>
+
+  <div class="card is-healthy">
+    <p class="card-title">Atomic Redis NX Gates <span class="badge healthy">HEALTHY</span></p>
+
+    <p>The <code>NX</code> (set-if-not-exists) pattern in <code>handlePlayerReady</code> and <code>doSettle</code> correctly prevents double-countdown and double-settlement races when both players send ready/game-over simultaneously. This is correct distributed systems design for a single-node Redis deployment.</p>
+  </div>
+
+  <hr>
+
+  <!-- Summary Table -->
+  <h2>Summary</h2>
+
+  <table>
+    <thead><tr><th>Issue</th><th>Severity</th><th>Effort</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Three parallel state machines, no shared contract (I2)</td>
+        <td><span class="badge critical">CRITICAL</span></td>
+        <td>Medium — shared constants file, derive server + frontend from one source</td>
+      </tr>
+      <tr>
+        <td>WS protocol as implicit 30-event schema (I1)</td>
+        <td><span class="badge high">HIGH</span></td>
+        <td>Low — one typed protocol definition file, type <code>send()</code> and <code>ws.on()</code></td>
+      </tr>
+      <tr>
+        <td>Consensus logic inside transport handler (I6)</td>
+        <td><span class="badge moderate">MODERATE</span></td>
+        <td>Low — ~30-line extraction to a pure function</td>
+      </tr>
+      <tr>
+        <td>Dual contract clients without shared types (I3)</td>
+        <td><span class="badge low">LOW</span></td>
+        <td>Low — defer to next contract migration</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <blockquote>The two critical issues share a root cause: the match lifecycle domain has no explicit, enforced representation that all components agree on. The WS protocol is one expression of that domain; the state machines are another. Fixing I2 first (canonical status types) will naturally reduce the scope of I1 (fewer implicit event-to-status assumptions). Neither fix requires architectural change — both are additive type definitions that make existing implicit contracts explicit.</blockquote>
+
+</div>
+</body>
+</html>

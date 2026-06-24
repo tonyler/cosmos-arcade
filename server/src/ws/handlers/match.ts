@@ -3,7 +3,7 @@ import { redis } from '../../redis'
 import { settleMatch, cancelMatchOnChain, abortMatchOnChain } from '../../chain/settlement'
 import { telem } from '../telemetry'
 import type { BetCreate, CasualCreate, MatchCancel, Bet } from './types'
-import { initGame, update, nextRound, type Dir, type GameState } from '../../games/pacman/engine'
+import { getGame, type GamePlugin } from '../../games/registry'
 
 // ── Match factory ─────────────────────────────────────────────────────────────
 
@@ -13,73 +13,8 @@ interface Match {
   gameSlug: string
   phase: 'waiting' | 'complete'
   onComplete: ((winner: string) => void) | null
-  pacmanGame?: PacManServerGame
+  serverGame?: GamePlugin
   terminate(winner: string): void
-}
-
-const PACMAN_TICK_MS = 20  // 50 fps
-
-class PacManServerGame {
-  private state: GameState
-  private p1Queue: Dir[] = []
-  private p2Queue: Dir[] = []
-  private interval: ReturnType<typeof setInterval> | null = null
-  private roundTimeout: ReturnType<typeof setTimeout> | null = null
-
-  constructor(
-    private matchId: string,
-    private p1: string,
-    private p2: string,
-    private onOver: (winnerAddr: string) => void,
-  ) {
-    this.state = initGame()
-  }
-
-  bufferInput(slot: 1 | 2, dir: Dir) {
-    if (slot === 1) this.p1Queue.push(dir)
-    else this.p2Queue.push(dir)
-  }
-
-  start() {
-    this.broadcast()
-    this.interval = setInterval(() => this.tick(), PACMAN_TICK_MS)
-  }
-
-  stop() {
-    if (this.interval) { clearInterval(this.interval); this.interval = null }
-    if (this.roundTimeout) { clearTimeout(this.roundTimeout); this.roundTimeout = null }
-  }
-
-  private tick() {
-    const p1Dir = this.p1Queue.shift() ?? null
-    const p2Dir = this.p2Queue.shift() ?? null
-    this.state = update(this.state, PACMAN_TICK_MS, { p1Dir, p2Dir })
-    this.broadcast()
-
-    if (this.state.phase !== 'gameOver' || !this.state.winner) return
-    if (this.interval) { clearInterval(this.interval); this.interval = null }
-
-    const p1Wins = this.state.p1Wins + (this.state.winner === 1 ? 1 : 0)
-    const p2Wins = this.state.p2Wins + (this.state.winner === 2 ? 1 : 0)
-    this.state = { ...this.state, p1Wins, p2Wins }
-    this.broadcast()
-
-    if (p1Wins >= 3 || p2Wins >= 3) {
-      const winnerAddr = this.state.winner === 1 ? this.p1 : this.p2
-      this.onOver(winnerAddr)
-    } else {
-      this.roundTimeout = setTimeout(() => {
-        this.state = nextRound(this.state)
-        this.interval = setInterval(() => this.tick(), PACMAN_TICK_MS)
-      }, 1500)
-    }
-  }
-
-  private broadcast() {
-    const data = { matchId: this.matchId, state: this.state }
-    send(this.p1, 'game:state', data)
-    send(this.p2, 'game:state', data)
-  }
 }
 
 function createMatch(p1: string, p2: string, gameSlug: string): Match {
@@ -92,7 +27,7 @@ function createMatch(p1: string, p2: string, gameSlug: string): Match {
     terminate(winner) {
       if (m.phase === 'complete') return
       m.phase = 'complete'
-      m.pacmanGame?.stop()
+      m.serverGame?.stop()
       m.onComplete?.(winner)
     },
   }
@@ -131,8 +66,8 @@ function attachCompletion(match: Match, matchId: string, creator: string, oppone
       return
     }
 
-    send(creator, 'match:settling', { matchId })
-    send(opponent, 'match:settling', { matchId })
+    send(creator, 'match:settling', { matchId, winner })
+    send(opponent, 'match:settling', { matchId, winner })
     telem('match:settling', { matchId, winner, p1: creator, p2: opponent })
 
     let txHash: string
@@ -144,9 +79,9 @@ function attachCompletion(match: Match, matchId: string, creator: string, oppone
       await redis.set(`match:bet:${matchId}`, JSON.stringify({
         ...bet, status: 'settlement_failed', winner, failedAt: Date.now(),
       }), 'EX', 86400)
-      const errMsg = 'Settlement failed — your funds are safe on-chain. Contact support with match ID: ' + matchId
-      send(creator, 'match:error', { message: errMsg })
-      send(opponent, 'match:error', { message: errMsg })
+      const loser = winner === creator ? opponent : creator
+      send(winner, 'match:error', { message: 'Your winnings could not be sent automatically — funds are safe on-chain. Contact support with match ID: ' + matchId })
+      send(loser, 'match:error', { message: 'Settlement failed — match ID: ' + matchId })
       telem('match:settlement_failed', { matchId, winner, error: String(e), creator, opponent })
       activeMatches.delete(matchId)
       return  // do NOT call cleanupMatch — preserve Redis for recovery
@@ -268,12 +203,10 @@ export async function handlePlayerReady(address: string, matchId: string) {
       send(activeBet.opponent!, 'match:begin', { matchId, p1: activeBet.creator, p2: activeBet.opponent })
       telem('match:begin', { matchId, p1: activeBet.creator, p2: activeBet.opponent, gameSlug: activeBet.gameSlug, amount: activeBet.amount, denom: activeBet.denom })
 
-      if (activeBet.gameSlug === 'pacman') {
-        const pacman = new PacManServerGame(matchId, activeBet.creator, activeBet.opponent!, (winnerAddr) => {
-          match.terminate(winnerAddr)
-        })
-        match.pacmanGame = pacman
-        pacman.start()
+      const factory = getGame(activeBet.gameSlug)
+      if (factory) {
+        match.serverGame = factory(matchId, activeBet.creator, activeBet.opponent!, (winner) => match.terminate(winner))
+        match.serverGame.start()
       }
     }, 3_000)
   }
@@ -400,7 +333,7 @@ export function handleGameState(from: string, matchId: string, stateData: unknow
     }
   }
 
-  send(other, 'game:state', stateData)
+  if (!match.serverGame) send(other, 'game:state', stateData)
 }
 
 // ── Real-time input relay (hot path — sync, no Redis) ─────────────────────────
@@ -411,9 +344,9 @@ export function handleGameInput(from: string, matchId: string, slot: 1 | 2, dir:
   const actualSlot: 1 | 2 = match.player1 === from ? 1 : 2
   if (slot !== actualSlot) return
 
-  // PacMan: buffer input into server-side simulation instead of relaying
-  if (match.pacmanGame) {
-    match.pacmanGame.bufferInput(actualSlot, dir as Dir)
+  // Server-authoritative game: route input to plugin instead of relaying
+  if (match.serverGame) {
+    match.serverGame.handleInput(actualSlot, dir)
     return
   }
 
@@ -453,6 +386,10 @@ async function markDisputed(matchId: string, bet: any, p1: string, p1Winner: str
 }
 
 export async function handleGameOver(from: string, matchId: string, winner: string) {
+  // Ignore client game:over reports for server-authoritative games
+  const match = activeMatches.get(matchId)
+  if (match?.serverGame) return
+
   const raw = await redis.get(`match:bet:${matchId}`)
   if (!raw) return
   const bet = JSON.parse(raw)

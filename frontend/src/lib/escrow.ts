@@ -1,4 +1,4 @@
-import { SigningCosmWasmClient } from '@cosmjs/cosmwasm-stargate'
+import { SigningCosmWasmClient, CosmWasmClient } from '@cosmjs/cosmwasm-stargate'
 import { GasPrice } from '@cosmjs/stargate'
 import { CHAIN_ID } from './keplr'
 
@@ -55,10 +55,10 @@ export async function acceptMatch(from: string, matchId: string, amount: string,
   return res.transactionHash
 }
 
-/** Query current match state from chain */
+/** Query current match state from chain (read-only, no wallet required) */
 export async function queryMatch(matchId: string): Promise<MatchState> {
   requireContract()
-  const client = await signingClient()
+  const client = await CosmWasmClient.connect(import.meta.env.VITE_RPC_URL ?? 'https://rpc.cosmos.network:443')
   const res = await client.queryContractSmart(CONTRACT_ADDRESS, { match: { match_id: matchId } })
   return {
     matchId: res.match_id,

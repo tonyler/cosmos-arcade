@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Modularity Review</title>
+<style>
+  :root {
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    --font-mono: 'SF Mono', 'Fira Code', 'Fira Mono', Menlo, Consolas, monospace;
+    --max-width: 820px;
+  }
+
+  :root[data-theme="light"] {
+    --bg: #ffffff;
+    --bg-secondary: #f6f8fa;
+    --bg-tertiary: #eef1f5;
+    --text: #1a1a1a;
+    --text-secondary: #4a5568;
+    --text-muted: #718096;
+    --border: #e2e8f0;
+    --accent: #2b6cb0;
+    --accent-light: #ebf4ff;
+    --severity-critical: #c53030;
+    --severity-critical-bg: #fff5f5;
+    --severity-significant: #c05621;
+    --severity-significant-bg: #fffaf0;
+    --severity-minor: #2b6cb0;
+    --severity-minor-bg: #ebf8ff;
+    --table-stripe: #f7fafc;
+    --link: #2b6cb0;
+    --link-hover: #1a4971;
+    --shadow: rgba(0, 0, 0, 0.06);
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #1a1a1a;
+    --bg-secondary: #242424;
+    --bg-tertiary: #2e2e2e;
+    --text: #e2e2e2;
+    --text-secondary: #a0a0a0;
+    --text-muted: #717171;
+    --border: #333333;
+    --accent: #b0b0b0;
+    --accent-light: #2a2a2a;
+    --severity-critical: #fc8181;
+    --severity-critical-bg: #2d1b1b;
+    --severity-significant: #f6ad55;
+    --severity-significant-bg: #2d2415;
+    --severity-minor: #a0a0a0;
+    --severity-minor-bg: #282828;
+    --table-stripe: #222222;
+    --link: #e0c97f;
+    --link-hover: #f0dca0;
+    --shadow: rgba(0, 0, 0, 0.2);
+  }
+
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    margin: 0;
+    padding: 2rem 1.5rem;
+    transition: background 0.3s ease, color 0.3s ease;
+  }
+
+  .container {
+    max-width: var(--max-width);
+    margin: 0 auto;
+  }
+
+  .theme-toggle {
+    position: fixed;
+    top: 1.5rem;
+    right: 1.5rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    color: var(--text);
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+    z-index: 100;
+  }
+
+  .theme-toggle:hover {
+    background: var(--bg-tertiary);
+  }
+
+  h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin: 0 0 0.5rem 0;
+    color: var(--text);
+  }
+
+  h2 {
+    font-size: 1.4rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 2.5rem 0 1rem 0;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+  }
+
+  h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 1.8rem 0 0.6rem 0;
+    color: var(--text);
+  }
+
+  p {
+    margin: 0 0 1rem 0;
+    color: var(--text-secondary);
+  }
+
+  a {
+    color: var(--link);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: border-color 0.2s ease;
+  }
+
+  a:hover {
+    color: var(--link-hover);
+    border-bottom-color: var(--link-hover);
+  }
+
+  .meta {
+    color: var(--text-muted);
+    font-size: 0.95rem;
+    margin-bottom: 2.5rem;
+  }
+
+  .meta strong {
+    color: var(--text-secondary);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.5rem 0;
+    font-size: 0.9rem;
+  }
+
+  th {
+    background: var(--bg-secondary);
+    font-weight: 600;
+    text-align: left;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+
+  td {
+    padding: 0.65rem 1rem;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+  }
+
+  tr:nth-child(even) td {
+    background: var(--table-stripe);
+  }
+
+  .severity {
+    display: inline-block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.15rem 0.6rem;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .severity-critical {
+    color: var(--severity-critical);
+    background: var(--severity-critical-bg);
+  }
+
+  .severity-significant {
+    color: var(--severity-significant);
+    background: var(--severity-significant-bg);
+  }
+
+  .severity-minor {
+    color: var(--severity-minor);
+    background: var(--severity-minor-bg);
+  }
+
+  .issue {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem 2rem;
+    margin: 1.5rem 0;
+    box-shadow: 0 1px 3px var(--shadow);
+  }
+
+  .issue h2 {
+    margin-top: 0;
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
+  .issue h3 {
+    font-size: 1rem;
+  }
+
+  .issue-meta {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    margin-bottom: 1rem;
+  }
+
+  ul, ol {
+    padding-left: 1.5rem;
+    color: var(--text-secondary);
+  }
+
+  li {
+    margin-bottom: 0.35rem;
+  }
+
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.88em;
+    background: var(--bg-tertiary);
+    padding: 0.15rem 0.4rem;
+    border-radius: 3px;
+  }
+
+  hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 3rem 0 1.5rem 0;
+  }
+
+  .footer {
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    font-style: italic;
+  }
+
+  .footer a {
+    color: var(--text-muted);
+    border-bottom-color: var(--border);
+  }
+
+  .footer a:hover {
+    color: var(--link);
+  }
+
+  @media print {
+    .theme-toggle { display: none; }
+    body { padding: 0; }
+    .issue { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+  <span id="theme-icon"></span>
+</button>
+
+<div class="container">
+  <h1>Modularity Review</h1>
+
+  <div class="meta">
+    <strong>Scope</strong>: Retro FPS game — configurability for new maps, weapons, and content<br>
+    <strong>Date</strong>: 2026-06-22
+  </div>
+
+  <h2>Executive Summary</h2>
+
+  <p>The Retro FPS is the open-source "Player Versus Player" engine by KesieV, embedded in a React iframe. The outer boundary — <code>RetroFPSGame.tsx</code> communicating with the game via a typed postMessage <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">contract</a> — is clean and well-designed. Inside the iframe, however, the game uses a global-variable architecture where all content lives in a small set of large files. The <a href="https://coupling.dev/posts/core-concepts/modularity/">modularity</a> of this inner layer has three significant problems from the perspective of adding new content: weapon registration is an implicit multi-file contract with no enforcement; all map data lives in a single monolithic file; and the asset manifest (sounds, images) is hardcoded directly in <code>arcade.html</code>. As the game grows with new maps, weapons, and modes, these problems will compound: changes are frequent, but each change requires coordinating 2–4 files with no mechanical check that they are consistent.</p>
+
+  <h2>Coupling Overview Table</h2>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Integration</th>
+        <th><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Strength</a></th>
+        <th><a href="https://coupling.dev/posts/dimensions-of-coupling/distance/">Distance</a></th>
+        <th><a href="https://coupling.dev/posts/dimensions-of-coupling/volatility/">Volatility</a></th>
+        <th><a href="https://coupling.dev/posts/core-concepts/balance/">Balanced?</a></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>RetroFPSGame.tsx</code> → <code>arcade-netplay.js</code></td>
+        <td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Contract</a></td>
+        <td>High (iframe boundary)</td>
+        <td>Low</td>
+        <td>✅ Yes</td>
+      </tr>
+      <tr>
+        <td><code>weapons.js</code> → <code>maploader.js</code> (pickable tiles)</td>
+        <td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Functional</a> (implicit string)</td>
+        <td>Low (same scope)</td>
+        <td>High</td>
+        <td>❌ No</td>
+      </tr>
+      <tr>
+        <td><code>weapons.js</code> → <code>arcade.html</code> (sound IDs)</td>
+        <td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Functional</a> (implicit string)</td>
+        <td>Low (same load)</td>
+        <td>High</td>
+        <td>❌ No</td>
+      </tr>
+      <tr>
+        <td><code>maps.js</code> (monolith) → <code>maploader.js</code></td>
+        <td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Model</a></td>
+        <td>Low (same scope)</td>
+        <td>High</td>
+        <td>❌ No</td>
+      </tr>
+      <tr>
+        <td><code>maploader.js</code> TILETYPES → map authors</td>
+        <td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Functional</a></td>
+        <td>Low (same scope)</td>
+        <td>Medium</td>
+        <td>⚠️ Marginal</td>
+      </tr>
+      <tr>
+        <td><code>maps.js</code> / <code>weapons.js</code> → <code>gamemodes.js</code></td>
+        <td><a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">Model</a></td>
+        <td>Low (same scope)</td>
+        <td>Low</td>
+        <td>✅ Yes</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="issue">
+    <h2>Issue: Weapon Registration Is an Implicit Four-File Contract</h2>
+    <div class="issue-meta">
+      <strong>Integration</strong>: <code>weapons.js</code> → <code>maploader.js</code> → <code>arcade.html</code> &nbsp;|&nbsp;
+      <span class="severity severity-critical">Critical</span>
+    </div>
+
+    <h3>Knowledge Leakage</h3>
+    <p>Adding a new weapon requires knowing — and correctly executing — four separate steps across four different files, with no code to remind you if you miss one:</p>
+    <ol>
+      <li><strong><code>weapons.js</code></strong>: define the weapon object, including <code>sound: "plasma"</code> (a string ID) and <code>spriteY: 7</code> (a raw pixel-grid coordinate into <code>weapons.png</code>)</li>
+      <li><strong><code>maploader.js</code></strong>: add a <code>pickablePlasma</code> entry to <code>TILETYPES</code> with <code>pickable: true, weapon: "plasma"</code> (the string must match exactly)</li>
+      <li><strong><code>arcade.html</code></strong>: add <code>{ id: 'plasma', file: 'sounds/plasma' }</code> to the <code>AUDIO</code> array</li>
+      <li><strong><code>arcade.html</code></strong>: add <code>{ id: 'speak_plasma', sam: { text: 'plasma!' } }</code> to the <code>AUDIO</code> array for the voice announcer</li>
+    </ol>
+    <p>The <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">integration strength</a> between these components is functional: they share business-logic knowledge (what a weapon is, how it sounds, how it is picked up) but express that knowledge as matching strings distributed across files. The string <code>"plasma"</code> is an invisible shared contract with no type system, no schema, and no validation.</p>
+
+    <h3>Complexity Impact</h3>
+    <p>This is a <a href="https://coupling.dev/posts/core-concepts/complexity/">complexity</a> problem: the outcome of a change is unpredictable because the mental model required to add one weapon spans four files with no single source of truth. A developer who correctly adds the weapon to <code>weapons.js</code> and <code>maploader.js</code> but forgets the sound entries in <code>arcade.html</code> gets a weapon that silently plays nothing — no error, no crash, just broken behaviour. The <code>spriteY</code> coordinate is even more opaque: it is a magic number referencing a row in a PNG spritesheet, and there is no code that validates whether the row exists.</p>
+    <p>The 4+/-1 unit cognitive limit is breached: holding the weapon definition, the tile type, the sound ID, the voice ID, and the sprite coordinate in working memory simultaneously while editing four unrelated files is error-prone by design.</p>
+
+    <h3>Cascading Changes</h3>
+    <ul>
+      <li><strong>Add a weapon</strong> → must update <code>weapons.js</code>, <code>maploader.js</code>, <code>arcade.html</code> (twice), and the graphics PNG</li>
+      <li><strong>Rename a weapon ID</strong> → <code>weapons.js</code>, <code>maploader.js</code> (<code>weapon:</code> field), any map data referencing the tile name, <code>arcade.html</code> (sound IDs), announcer references in <code>gamemodes.js</code></li>
+      <li><strong>Add a weapon sound variant</strong> → <code>arcade.html</code> plus any code reading the sound ID</li>
+      <li><strong>Reorder the weapons spritesheet</strong> → every <code>spriteY</code> / <code>pickTextureX</code> / <code>pickTextureY</code> value in <code>weapons.js</code> must be updated by hand</li>
+    </ul>
+
+    <h3>Recommended Improvement</h3>
+    <p>Introduce a <strong>weapon manifest</strong> — a single object (or file) that co-locates all the information needed to register a weapon: its gameplay stats, its sound IDs, its sprite coordinates, and its pickable tile name. The <code>arcade.html</code> asset loader and <code>maploader.js</code> TILETYPES should be generated from this manifest, not maintained by hand.</p>
+    <p>Minimum viable step (no new infrastructure): move the sound and sprite fields into <code>weapons.js</code> entries and write a small <code>registerWeapons()</code> function called at startup that populates <code>TILETYPES</code> pickable entries from <code>WEAPONS</code> automatically — eliminating the manual <code>pickablePlasma</code> step. This reduces four-file coordination to two (weapon data + graphics asset).</p>
+    <p>The trade-off: this requires a small refactor of the startup sequence in <code>arcade.html</code>, but the payoff — adding a weapon in one place — is directly proportional to how often new weapons are added.</p>
+  </div>
+
+  <div class="issue">
+    <h2>Issue: All Maps Live in a Single Monolithic File</h2>
+    <div class="issue-meta">
+      <strong>Integration</strong>: <code>maps.js</code> → <code>maploader.js</code>, <code>gamemodes.js</code>, <code>scoreattack.js</code> &nbsp;|&nbsp;
+      <span class="severity severity-significant">Significant</span>
+    </div>
+
+    <h3>Knowledge Leakage</h3>
+    <p><code>maps.js</code> is a single JavaScript file containing every map definition as entries in one <code>MAPS[]</code> array. At over 3,500 lines, every map's full grid data (wall, floor, ceiling layers as numeric arrays) and modifier list coexists in the same file. The <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">model coupling</a> between the file and its consumers (<code>maploader.js</code>, <code>gamemodes.js</code>) is appropriate — they only read <code>MAPS[id].wall.grid</code>, <code>MAPS[id].mods</code>, and <code>MAPS[id].label</code> — but the physical co-location of all maps in one file makes the <a href="https://coupling.dev/posts/dimensions-of-coupling/volatility/">volatility</a> of each individual map expensive to manage.</p>
+
+    <h3>Complexity Impact</h3>
+    <p>When every map lives in one file, adding or editing any map requires opening, navigating, and correctly modifying a 3,500-line file. This creates practical friction: map data is dense (numeric arrays), maps are hard to diff in version control, and working on two maps simultaneously causes merge conflicts in the same file. There is also no obvious place to add per-map documentation or metadata without it getting lost in the monolith.</p>
+
+    <h3>Cascading Changes</h3>
+    <ul>
+      <li><strong>Add a map</strong> → append to <code>maps.js</code>; the rest of the system (UI, random selection, score tracking) picks it up automatically via <code>MAPS.length</code> and <code>MAPS.forEach</code> — so only one file needs changing</li>
+      <li><strong>Edit an existing map</strong> → must navigate a 3,500-line file; any concurrent map edit causes a merge conflict</li>
+      <li><strong>Add a map-specific game mode override</strong> → there is nowhere clean to express this; it would go into the same blob</li>
+    </ul>
+
+    <h3>Recommended Improvement</h3>
+    <p>Split <code>maps.js</code> into individual map files: <code>maps/the-pit.js</code>, <code>maps/forest.js</code>, etc. Create a thin <code>maps/index.js</code> that imports all of them and assembles <code>MAPS = [ThePit, Forest, ...]</code>. Each file is ~50–150 lines, self-contained, and independently diffable.</p>
+    <p><code>arcade.html</code> adds one <code>&lt;script&gt;</code> tag per map file (or they concatenate at build time). The consumers (<code>maploader.js</code>, <code>gamemodes.js</code>) require no changes — they still read the same <code>MAPS</code> global.</p>
+    <p>Trade-off: more files, one extra <code>&lt;script&gt;</code> tag per map. The payoff: each map is an independently editable, reviewable, and merge-safe unit. This is the right structure when maps are the primary content creation surface.</p>
+  </div>
+
+  <div class="issue">
+    <h2>Issue: Asset Manifest Is Hardcoded in arcade.html</h2>
+    <div class="issue-meta">
+      <strong>Integration</strong>: Content files (maps, weapons, sounds) → <code>arcade.html</code> AUDIO/IMAGES arrays &nbsp;|&nbsp;
+      <span class="severity severity-significant">Significant</span>
+    </div>
+
+    <h3>Knowledge Leakage</h3>
+    <p><code>arcade.html</code> contains two hardcoded arrays — <code>IMAGES</code> and <code>AUDIO</code> — that list every asset the game will load. These arrays are the sole registration mechanism for sounds, music, and graphics. Adding any content that requires a new asset requires editing the HTML file directly. This is <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">functional coupling</a> at the wrong level: the HTML entry point owns business-domain knowledge (which weapons have sounds, which skyboxes exist) that should live closer to the content definitions.</p>
+
+    <h3>Complexity Impact</h3>
+    <p><code>arcade.html</code> becomes a required stop on every content-addition workflow, even when the change is entirely about a new weapon or a new map skybox. A developer adding a weapon must remember that <code>arcade.html</code> is the sound registry — this is non-obvious, especially since <code>weapons.js</code> is where weapon behaviour is defined. The failure mode is silent: a missing sound entry causes the weapon to play nothing, with no console error from the game engine.</p>
+
+    <h3>Cascading Changes</h3>
+    <ul>
+      <li><strong>Add a weapon</strong> → edit <code>arcade.html</code> (sound + voice entries) in addition to <code>weapons.js</code> and <code>maploader.js</code></li>
+      <li><strong>Add a new skybox for a map</strong> → edit <code>arcade.html</code> (IMAGES entry) plus whatever map references it</li>
+      <li><strong>Add background music</strong> → edit <code>arcade.html</code> AUDIO with <code>isSong: true</code>, plus reference by ID from game code</li>
+      <li><strong>Remove a weapon</strong> → must remember to clean up its entries from <code>arcade.html</code> or the file stays loaded forever</li>
+    </ul>
+
+    <h3>Recommended Improvement</h3>
+    <p>Move asset registration to the data files that own the content. Weapon sounds belong next to weapon definitions; skybox images belong next to the map definitions that use them. At startup, a small asset collector function can walk <code>WEAPONS</code> and <code>MAPS</code> to assemble the dynamic load list, removing the need to maintain <code>arcade.html</code> manually.</p>
+    <p>For the short term, a lower-cost improvement is to add a comment block in <code>arcade.html</code> that explicitly marks which AUDIO entries correspond to which weapon, making the implicit contract visible without changing any code.</p>
+  </div>
+
+  <div class="issue">
+    <h2>Issue: Map Authoring Vocabulary (TILETYPES) Is Buried in the Loader</h2>
+    <div class="issue-meta">
+      <strong>Integration</strong>: Map authors → <code>maploader.js</code> TILETYPES &nbsp;|&nbsp;
+      <span class="severity severity-minor">Minor</span>
+    </div>
+
+    <h3>Knowledge Leakage</h3>
+    <p>The complete vocabulary of tile type names available when authoring a map — <code>door</code>, <code>flames</code>, <code>lava</code>, <code>pickableShotgun</code>, <code>spawnpoint0</code>, <code>hotspot</code>, <code>teleport</code>, etc. — is defined inside the <code>MapLoader</code> function in <code>maploader.js</code>, not alongside the map data. A developer creating a new map must read the loader implementation to discover what tile type names are available. This is an <a href="https://coupling.dev/posts/dimensions-of-coupling/integration-strength/">integration strength</a> problem: the map data and the tile vocabulary are conceptually the same domain (map authoring), but physically separated.</p>
+
+    <h3>Complexity Impact</h3>
+    <p>The cognitive cost is modest — once you know that TILETYPES is in <code>maploader.js</code>, you can find it. But it creates a discovery barrier for new contributors and makes it easy to typo a tile name (e.g., <code>pickableRocket</code> instead of <code>pickableRocketLauncher</code>) with no error until runtime.</p>
+
+    <h3>Cascading Changes</h3>
+    <ul>
+      <li><strong>Add a new tile type</strong> → edit <code>maploader.js</code>; maps can immediately reference it</li>
+      <li><strong>Remove a tile type</strong> → maps silently stop using it (unknown tile names are ignored); no warning</li>
+      <li><strong>Discover what tile types exist</strong> → must read <code>maploader.js</code> implementation code</li>
+    </ul>
+
+    <h3>Recommended Improvement</h3>
+    <p>Extract <code>TILETYPES</code> from inside the <code>MapLoader</code> function into a top-level constant in <code>data.js</code> (where other game constants live) or into its own <code>tiletypes.js</code> file. This makes the vocabulary self-documenting and adjacent to the map data it governs. <code>maploader.js</code> simply imports and uses it. No behaviour changes, minimal diff.</p>
+  </div>
+
+  <div class="footer">
+    <p><em>This analysis was performed using the <a href="https://coupling.dev">Balanced Coupling</a> model by <a href="https://vladikk.com">Vlad Khononov</a>.</em></p>
+  </div>
+</div>
+
+<script>
+  function getDefaultTheme() {
+    const hour = new Date().getHours();
+    return (hour >= 7 && hour < 19) ? 'light' : 'dark';
+  }
+
+  function setTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('modularity-review-theme', theme);
+    document.getElementById('theme-icon').textContent = theme === 'light' ? '☾' : '☀';
+  }
+
+  function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme');
+    setTheme(current === 'light' ? 'dark' : 'light');
+  }
+
+  const saved = localStorage.getItem('modularity-review-theme');
+  setTheme(saved || getDefaultTheme());
+</script>
+</body>
+</html>

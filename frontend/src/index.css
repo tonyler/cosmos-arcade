@@ -12,10 +12,11 @@
       overflow: hidden;
     }
   }
-  /* Mobile: allow normal viewport scroll */
+  /* Mobile: fit within safe viewport (under browser chrome), lock all scroll */
   @media (max-width: 767px) {
-    body {
-      overflow-x: hidden;
+    html, body, #root {
+      height: 100svh;
+      overflow: hidden;
     }
   }
   body {
