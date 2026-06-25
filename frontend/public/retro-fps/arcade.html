@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, user-scalable=no">
+  <title>Retro FPS</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
+    canvas {
+      image-rendering: pixelated;
+      image-rendering: -moz-crisp-edges;
+      image-rendering: crisp-edges;
+    }
+    #loader {
+      position: fixed; inset: 0; background: #000;
+      color: #f5edba; font-family: monospace; font-size: 14px;
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 10px; z-index: 999;
+    }
+    #lbar-wrap { width: 200px; height: 4px; background: #333; border-radius: 2px; overflow: hidden; }
+    #lbar { height: 100%; width: 0%; background: #9d303b; }
+    #click-to-start {
+      display: none; position: fixed; inset: 0; z-index: 998;
+      align-items: center; justify-content: center; cursor: pointer;
+    }
+    #click-to-start span {
+      color: #f5edba; font-family: monospace; font-size: 16px;
+      background: rgba(0,0,0,0.6); padding: 12px 24px; border: 1px solid #9d303b;
+      animation: blink 1.2s step-start infinite;
+    }
+    @keyframes blink { 50% { opacity: 0; } }
+  </style>
+</head>
+<body>
+  <div id="loader">
+    <div>Loading Retro FPS...</div>
+    <div id="lbar-wrap"><div id="lbar"></div></div>
+  </div>
+  <div id="click-to-start"><span>CLICK TO START</span></div>
+
+  <!-- NETPLAY shim must be declared before pvp scripts -->
+  <script src="arcade-netplay.js"></script>
+
+  <!-- Stubs so pvp doesn't crash on undefined globals we don't load -->
+  <script>
+    var PLAYLIGHT = { isPlayLightMode: function(){ return false; }, load: function(){} };
+    var KIOSKMODE = { isKioskMode: function(){ return false; } };
+    var NETPLAYGAMESETTINGS = [];
+    // Stub constructors that GameState references but we never navigate to
+    // MAINMENU is loaded from mainmenu.js below; stub kept as fallback only if load fails
+    // var MAINMENU = { initialize:function(){}, ... };
+    var CREDITS = { initialize:function(){}, show:function(){}, frame:function(){ return -1; }, render:function(){} };
+    var SCOREATTACK = { initialize:function(){}, show:function(){}, frame:function(){ return -1; }, render:function(){} };
+    var BENCHMARK = { initialize:function(){}, show:function(){}, frame:function(){}, render:function(){} };
+    var LOCALMULTIPLAYER = { initialize:function(){}, show:function(){}, frame:function(){ return -1; }, render:function(){} };
+    var CONTROLSSETTINGSMENU = { initialize:function(){}, show:function(){}, frame:function(){ return -1; }, render:function(){} };
+  </script>
+
+  <script>
+    window.onerror = function(msg, src, line) {
+      var el = document.getElementById('loader') || document.createElement('div');
+      el.id = 'loader'; el.style.display = 'flex';
+      el.innerHTML = '<div style="color:#f55;max-width:80%;word-break:break-all">' + msg + '<br><small>' + (src||'') + ':' + (line||'') + '</small></div>';
+      if (!el.parentNode) document.body.appendChild(el);
+    };
+  </script>
+
+  <!-- pvp scripts - same load order as index.html minus peerjs/socket.io/netplay-*.js -->
+  <script src="js/external/samjs.min.js"></script>
+  <script src="js/external/xm.js"></script>
+  <script src="js/external/xmeffects.js"></script>
+
+  <script src="js/data.js"></script>
+  <script src="js/qmath.js"></script>
+  <script src="js/map-generator.js"></script>
+
+  <script src="js/gui-keymenu.js"></script>
+  <script src="js/gui-setupgame.js"></script>
+  <script src="js/gui-joinbox.js"></script>
+
+  <script src="js/particles.js"></script>
+  <script src="js/staticgenerator.js"></script>
+  <script src="js/engine.js?v=3"></script>
+  <script src="js/maps.js?v=6"></script>
+  <script src="js/weapons.js?v=4"></script>
+  <script src="js/controls.js"></script>
+  <script src="js/controlsexplain.js"></script>
+  <script src="js/gamemodes.js"></script>
+  <script src="js/gamemodes-arcade.js"></script>
+  <script src="js/game.js?v=4"></script>
+  <script src="js/transition.js"></script>
+  <script src="js/gamestate.js"></script>
+  <script src="js/audioplayer.js"></script>
+  <script src="js/settings.js"></script>
+  <script src="js/maploader.js"></script>
+  <script src="js/credits.js"></script>
+  <script src="js/scoreattack.js"></script>
+  <script src="js/localmultiplayer.js"></script>
+  <script src="js/benchmark.js"></script>
+  <script src="js/mainmenu.js"></script>
+
+  <script>
+  (function () {
+    // DOM must be first (same as index.html onl())
+    DOM = new Dom();
+
+    // Register pickable weapon tile types now that both WEAPONS and TILETYPES are available.
+    registerWeapons();
+
+    // Global (non-map-specific) images.
+    var IMAGES = [
+      { id: 'textures',   file: 'graphics/textures.png' },
+      { id: 'soldier',    file: 'graphics/soldier.png' },
+      { id: 'font-large', file: 'graphics/font-large.png' },
+      { id: 'font-small', file: 'graphics/font-small.png' },
+      { id: 'weapons',    file: 'graphics/weapons.png' },
+      { id: 'sprites',    file: 'graphics/sprites.png' },
+      { id: 'hud',        file: 'graphics/hud.png' }
+    ];
+
+    // Append skybox images derived from the map definitions (deduped).
+    (function () {
+      var seen = {};
+      MAPS.forEach(function (map) {
+        var skybox = map.skybox;
+        if (skybox && !seen[skybox]) {
+          seen[skybox] = true;
+          IMAGES.push({ id: 'skybox-' + skybox, file: 'graphics/skybox-' + skybox + '.png' });
+        }
+      });
+    })();
+
+    // Global audio (non-weapon-specific).
+    var AUDIO = [
+      { id:'point',       file:'sounds/point' },
+      { id:'flagaction',  file:'sounds/flagaction' },
+      { id:'die',         file:'sounds/die1',       pitchStart:0.9, pitchRange:0.2 },
+      { id:'hit0',        file:'sounds/hit1',        pitchStart:0.9, pitchRange:0.2 },
+      { id:'hit1',        file:'sounds/hit2',        pitchStart:0.9, pitchRange:0.2 },
+      { id:'hit2',        file:'sounds/hit3',        pitchStart:0.9, pitchRange:0.2 },
+      { id:'hit3',        file:'sounds/hit4',        pitchStart:0.9, pitchRange:0.2 },
+      { id:'hit4',        file:'sounds/hit5',        pitchStart:0.9, pitchRange:0.2 },
+      { id:'reload',      file:'sounds/reload',      pitchStart:0.9, pitchRange:0.2 },
+      { id:'door',        file:'sounds/door',        pitchStart:0.9, pitchRange:0.2 },
+      { id:'dronehit',    file:'sounds/dronehit',    pitchStart:0.9, pitchRange:0.2 },
+      { id:'teleport',    file:'sounds/teleport',    pitchStart:0.8, pitchRange:0.4 },
+      { id:'explosion',   file:'sounds/explosion',   pitchStart:0.8, pitchRange:0.4 },
+      { id:'speak_ready',    sam:{ text:'ready?' } },
+      { id:'speak_go',       sam:{ text:'go!' } },
+      { id:'speak_gameover', sam:{ text:'game over!' } },
+      { id:'speak_fragno0',  sam:{ text:'fragged!' } },
+      { id:'speak_fragyes0', sam:{ text:'radical!' } },
+      { id:'speak_fragyes1', sam:{ text:'incredible!' } },
+      { id:'speak_fragyes2', sam:{ text:'you rock!' } },
+      { id:'speak_fragyes3', sam:{ text:'outstanding!' } },
+      { id:'speak_youaretheone', sam:{ text:'you are the one!' } },
+      { id:'speak_bloodlust',    sam:{ text:'bloodlust!' } },
+      { id:'speak_countdown10',  sam:{ text:'ten.' } },
+      { id:'speak_countdown9',   sam:{ text:'nine.' } },
+      { id:'speak_countdown8',   sam:{ text:'eight.' } },
+      { id:'speak_countdown7',   sam:{ text:'seven.' } },
+      { id:'speak_countdown6',   sam:{ text:'six.' } },
+      { id:'speak_countdown5',   sam:{ text:'five.' } },
+      { id:'speak_countdown4',   sam:{ text:'four.' } },
+      { id:'speak_countdown3',   sam:{ text:'three.' } },
+      { id:'speak_countdown2',   sam:{ text:'two.' } },
+      { id:'speak_countdown1',   sam:{ text:'one.' } },
+      { id:'speak_countdown0',   sam:{ text:'zero.' } },
+      { id:'speak_title',        sam:{ text:'Player. versus. player.' } },
+      { id:'speak_suicide',      sam:{ text:'sue side!' } },
+      { id:'title', mod:'music/her_kiss.xm', title:'Her Kiss', author:'Drozerix' },
+      { id:'song0',  mod:'music/hit_xm.xm',          title:'Hit The Cheek',     author:'DIGITAL BEAT 2000', isSong:true },
+      { id:'song1',  mod:'music/mega_destruction.xm', title:'Mega Destruction',  author:'Zilly Mike',       isSong:true },
+      { id:'song2',  mod:'music/biotech.xm',          title:'Biotech',           author:'Kokesz',           isSong:true },
+    ];
+
+    // Append weapon fire sounds and announcer voice clips derived from WEAPONS.
+    // Each weapon has sound: (file id) and announce: (sam voice id) fields.
+    (function () {
+      var seenSound = {}, seenAnnounce = {};
+      Object.keys(WEAPONS).forEach(function (id) {
+        var w = WEAPONS[id];
+        if (w.sound && !seenSound[w.sound]) {
+          seenSound[w.sound] = true;
+          AUDIO.push({ id: w.sound, file: 'sounds/' + w.sound, pitchStart: 0.9, pitchRange: 0.2 });
+        }
+        if (w.announce && !seenAnnounce[w.announce]) {
+          seenAnnounce[w.announce] = true;
+          // Derive human-readable text from the announce id (strip "speak_" prefix, replace _ with space)
+          var text = w.announce.replace(/^speak_/, '').replace(/_/g, ' ') + '!';
+          // Preserve original quirky SAM pronunciations for known entries
+          var SAM_OVERRIDES = {
+            speak_rocketlauncher: 'rocket luncher!',
+            speak_machinegun:     'machine gun!'
+          };
+          AUDIO.push({ id: w.announce, sam: { text: SAM_OVERRIDES[w.announce] || text } });
+        }
+      });
+    })();
+
+    // 'like' entries must come after the sounds they reference are appended above.
+    AUDIO.push({ id:'menu_select', like:'pistol' });
+    AUDIO.push({ id:'menu_back',   like:'reload' });
+    AUDIO.push({ id:'menu_change', like:'point' });
+    AUDIO.push({ id:'menu_joinin', like:'reload' });
+    AUDIO.push({ id:'menu_notify', like:'point', pitchStart:1.5, pitchRange:0 });
+
+    var loadedImages = {};
+    var lbar = document.getElementById('lbar');
+    // ready=2: wait for both images AND audio to finish
+    var ready = 2;
+    var initDone = false;
+
+    function onReady() {
+      ready--;
+      if (ready <= 0 && !initDone) { initDone = true; initGame(); }
+    }
+
+    // Fallback: force-init after 4s in case audio never calls ondone
+    setTimeout(function () { if (!initDone) { initDone = true; initGame(); } }, 4000);
+
+    // --- Initialize all pvp globals (mirrors index.html callback) ---
+    function initGame() {
+      try { _initGame(); } catch(e) {
+        console.error('[retro-fps] initGame crashed:', e);
+        document.getElementById('loader').innerHTML = '<div style="color:#f55;font-family:monospace;padding:20px">Load error: ' + e.message + '</div>';
+      }
+    }
+    function _initGame() {
+      var master = {
+        math: 'base',
+        renderingMode: 'onscreen',
+        loadAudio: 1,
+        lowRes: 0,
+        screenControls: DOM.isTouch ? 'touch' : 'mouse'
+      };
+
+      QMATH  = new QMath(master);
+      TRIGO  = new Trigo(master);
+      SPRITE = new Sprite(master);
+      CANVAS = new Canvas(master);
+      CANVAS.initialize();
+
+      RC = new RayCaster({
+        w: SCREEN_WIDTH,
+        h: SCREEN_HEIGHT,
+        textureWidth: 32,
+        textureHeight: 32,
+        lowRes: master.lowRes
+      });
+
+      FONT        = CANVAS.createFont(loadedImages['font-large'],  8, 10, -1);
+      FONTSMALL   = CANVAS.createFont(loadedImages['font-small'],  5,  8, -1);
+      HUD         = CANVAS.createImage(loadedImages['hud']);
+      SOLDIERTEXTURES = RayCaster.createTextures(loadedImages['soldier'],  32, 32);
+      WALLTEXTURES    = RayCaster.createTextures(loadedImages['textures'], 32, 32);
+      SPRITETEXTURES  = RayCaster.createTextures(loadedImages['sprites'],  32, 32);
+      WEAPONSSPRITES  = CANVAS.createSprites(loadedImages['weapons'], 66, 66);
+      // Build SKYBOXES from whatever skybox images were loaded (derived from MAPS above).
+      SKYBOXES = {};
+      Object.keys(loadedImages).forEach(function (key) {
+        var m = key.match(/^skybox-(.+)$/);
+        if (m) SKYBOXES[m[1]] = loadedImages[key];
+      });
+
+      RC.setTextures(WALLTEXTURES);
+
+      DATA = new Data(master);
+      DATA.initialize();
+
+      STATICGENERATOR = new StaticGenerator();
+      STATICGENERATOR.initialize();
+
+      GAMEMODES = new GameModes(master);
+      GAMEMODES.initialize();
+
+      GAMESTATE = new GameState(master);
+      GAMESTATE.initialize();
+
+      CONTROLS = new Controls(master);
+      CONTROLS.initialize(GAMESTATE.screen.canvas);
+
+      CONTROLSEXPLAIN = new ControlsExplain(master);
+      CONTROLSEXPLAIN.initialize();
+
+      SETTINGS = new Settings(master);
+      SETTINGS.initialize();
+
+      // NETPLAY already set by arcade-netplay.js; call its no-op initialize
+      NETPLAY.initialize();
+
+      TRANSITION = new Transition();
+      TRANSITION.initialize();
+
+      LOCALMULTIPLAYER = new LocalMultiplayer();
+      LOCALMULTIPLAYER.initialize();
+
+      CONTROLSSETTINGSMENU = new ControlsSettings();
+      CONTROLSSETTINGSMENU.initialize();
+
+      GAME = new Game(master);
+      GAME.initialize();
+
+      MAPLOADER = new MapLoader(master);
+      MAPLOADER.initialize();
+
+      CREDITS = new Credits();
+      CREDITS.initialize();
+
+      SCOREATTACK = new ScoreAttack();
+      SCOREATTACK.initialize();
+
+      BENCHMARK = new Benchmark();
+      BENCHMARK.initialize();
+
+      MAINMENU = new MainMenu();
+      MAINMENU.initialize();
+
+      SETTINGS.reindexMenu();
+
+      // Patch TRANSITION.end to intercept game-over and report winner to parent
+      var _origEnd = TRANSITION.end.bind(TRANSITION);
+      TRANSITION.end = function (ret) {
+        if (ret && ret.leaderboard && ret.leaderboard.length > 0 && ret.lastRank > 0) {
+          var winnerPvpId = ret.leaderboard[0].id; // 0 = RED (P1), 1 = BLUE (P2)
+          var winnerSlot  = winnerPvpId + 1;       // 1-based slot for Cosmos Arcade
+          window.parent.postMessage({ type: 'pvp:winner', slot: winnerSlot }, window.location.origin);
+        }
+        // Don't navigate back to menu inside the iframe — parent handles closing
+      };
+
+      // Signal parent we're ready to receive pvp:init
+      window.parent.postMessage({ type: 'pvp:ready' }, window.location.origin);
+    } // end _initGame
+
+    // --- Receive pvp:init / pvp:solo from parent ---
+    window.addEventListener('message', function (e) {
+      if (!e.data || e.origin !== window.location.origin) return;
+
+      if (e.data.type === 'pvp:init') {
+        startMatch(e.data.slot);
+      }
+      if (e.data.type === 'pvp:solo') {
+        startMatch(1, true);
+      }
+    });
+
+    function startMatch(slot, solo) {
+      NETPLAY.isMaster  = (slot === 1);
+      NETPLAY.isEnabled = !solo;
+
+      // Build settings from CONFIG defaults (set by DATA + SETTINGS init)
+      var settings = {};
+      for (var k in CONFIG) settings[k] = CONFIG[k];
+      settings.scoreSymbol = '\u00B3'; // VICTORY_SYMBOL = String.fromCharCode(179)
+      settings.scoreLimit  = 10;
+      settings.map         = 1;  // Roccalupo (23x23, tightest 1v1 map)
+      settings.goBackTo    = 100;      // GAMESTATE_NETPLAY (intercepted, won't actually navigate)
+
+      // controller must match a key in CONTROLSAVAIL so GAMECONTROLS[player.controller] resolves
+      var localController = DOM.isTouch ? 'TOUCH' : 'KEYMOUSE';
+      var players = solo
+        ? [{ isLocal: true,  controller: localController, label: 'RED',  netId: 0 }]
+        : [
+            { isLocal: slot === 1, fake: slot !== 1, controller: slot === 1 ? localController : undefined, label: 'RED',  netId: 0 },
+            { isLocal: slot === 2, fake: slot !== 2, controller: slot === 2 ? localController : undefined, label: 'BLUE', netId: 1 }
+          ];
+
+      // Hide loader, show click-to-start overlay
+      var loader = document.getElementById('loader');
+      if (loader) loader.parentNode.removeChild(loader);
+      var cts = document.getElementById('click-to-start');
+      if (cts) {
+        cts.style.display = 'flex';
+        cts.addEventListener('click', function startOnClick() {
+          cts.style.display = 'none';
+          // Request pointer lock on the game canvas (first canvas in body)
+          var cvs = document.querySelector('canvas');
+          if (cvs && cvs.requestPointerLock) cvs.requestPointerLock();
+        }, { once: true });
+      }
+
+      GAMESTATE.run({
+        modules: ['_default', 'deathMatch', 'time'],
+        settings: settings,
+        players: players
+      });
+    }
+
+    // --- Load audio ---
+    AUDIOPLAYER = new AudioPlayer({ resources: AUDIO });
+    var imgTotal   = IMAGES.length;
+    // ponytail: alias items (like:) and MOD/XM music items never call onprogress —
+    // exclude them from the denominator so the bar doesn't stall at ~80%
+    var audioTotal = AUDIO.filter(function(a) { return !a.like && !a.mod; }).length;
+    var imgDone    = 0;
+    var audioDone  = 0;
+
+    function updateProgress() {
+      var total = imgTotal + audioTotal;
+      var done  = imgDone  + audioDone;
+      if (total > 0) lbar.style.width = Math.round((done / total) * 100) + '%';
+    }
+
+    var audioInited = AUDIOPLAYER.initialize(
+      function () { audioDone++; updateProgress(); },
+      function () { onReady(); }
+    );
+    // If AudioContext unavailable, initialize() returns true but won't call ondone
+    if (audioInited) onReady();
+
+    // --- Load images (mirrors Cover.loadNextImage) ---
+    var imgQueue = IMAGES.slice();
+    function loadNextImage() {
+      if (!imgQueue.length) { imgDone = imgTotal; updateProgress(); onReady(); return; }
+      var cfg = imgQueue.shift();
+      var img = document.createElement('img');
+      img.style.display = 'none';
+      img.onload = function () {
+        document.body.removeChild(img);
+        loadedImages[cfg.id] = img;
+        imgDone++; updateProgress();
+        loadNextImage();
+      };
+      img.onerror = function () {
+        document.body.removeChild(img);
+        console.warn('Failed to load', cfg.file);
+        imgDone++; updateProgress();
+        loadNextImage();
+      };
+      document.body.appendChild(img);
+      img.src = cfg.file;
+    }
+    loadNextImage();
+  })();
+  </script>
+</body>
+</html>

@@ -5,41 +5,51 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        px:   ['"Press Start 2P"', 'monospace'],
-        mono: ['"Space Mono"', 'monospace'],
-        ui:   ['"DM Sans"', 'sans-serif'],
+        px:   ['"Russo One"', 'sans-serif'],      // headings / logo
+        mono: ['"Space Mono"', 'monospace'],       // code / data
+        ui:   ['Sora', 'sans-serif'],              // body / UI
       },
       colors: {
         c: {
-          bg:       '#141e30',
-          panel:    '#0e1623',
-          surface:  '#18233a',
-          surface2: '#1e2d47',
-          border:   '#223050',
-          borderhi: '#334565',
+          bg:       '#04040d',                     // near-void
+          panel:    '#08081a',                     // side panels
+          surface:  '#0e0e22',                     // card surfaces
+          surface2: '#14142c',                     // elevated surfaces
+          border:   'rgba(109,40,217,0.18)',       // subtle violet dividers
+          borderhi: 'rgba(139,92,246,0.40)',       // hover / active borders
         },
       },
       keyframes: {
         fadeUp: {
-          from: { opacity: '0', transform: 'translateY(12px)' },
+          from: { opacity: '0', transform: 'translateY(10px)' },
           to:   { opacity: '1', transform: 'translateY(0)' },
         },
         drift: {
-          '0%,100%': { transform: 'translateY(0px) rotate(0deg)' },
-          '33%':     { transform: 'translateY(-14px) rotate(1.5deg)' },
-          '66%':     { transform: 'translateY(6px) rotate(-1deg)' },
+          '0%,100%': { transform: 'translateY(0px) translateX(0px)' },
+          '33%':     { transform: 'translateY(-18px) translateX(6px)' },
+          '66%':     { transform: 'translateY(8px) translateX(-4px)' },
         },
         pulse2: {
           '0%,100%': { opacity: '1' },
-          '50%':     { opacity: '0.4' },
+          '50%':     { opacity: '0.5' },
+        },
+        blink: {
+          '0%,49%':   { opacity: '1' },
+          '50%,100%': { opacity: '0' },
+        },
+        glowPulse: {
+          '0%,100%': { opacity: '0.12' },
+          '50%':     { opacity: '0.22' },
         },
       },
       animation: {
-        'fade-up':   'fadeUp 0.45s ease both',
-        'drift-a':   'drift 9s ease-in-out infinite',
-        'drift-b':   'drift 13s ease-in-out infinite 2s',
-        'drift-c':   'drift 11s ease-in-out infinite 5s',
-        'pulse2':    'pulse2 2.5s ease-in-out infinite',
+        'fade-up':    'fadeUp 0.4s ease both',
+        'drift-a':    'drift 12s ease-in-out infinite',
+        'drift-b':    'drift 16s ease-in-out infinite 3s',
+        'drift-c':    'drift 20s ease-in-out infinite 7s',
+        'pulse2':     'pulse2 3s ease-in-out infinite',
+        'blink':      'blink 1s step-end infinite',
+        'glow-pulse': 'glowPulse 4s ease-in-out infinite',
       },
     },
   },

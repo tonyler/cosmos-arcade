@@ -73,7 +73,7 @@ export interface Bullet3D {
   age: number
 }
 
-export type Arena3DPhase = 'ready' | 'playing' | 'gameOver'
+export type Arena3DPhase = 'playing' | 'gameOver'
 
 export interface Arena3DState {
   phase: Arena3DPhase
@@ -82,7 +82,7 @@ export interface Arena3DState {
   myBullets: Bullet3D[]
   oppBullets: Bullet3D[]
   winner: 1 | 2 | null
-  readyTimer: number
+  nextBulletId: number
   message: string
   mySlot: 1 | 2
 }
@@ -149,8 +149,6 @@ function randomSpawn(killerX: number, killerZ: number): { x: number; z: number }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
-let _bid = 0
-
 function makePlayer(slot: 1 | 2): Player3D {
   const pos = slot === 1 ? SPAWN_P1 : SPAWN_P2
   return {
@@ -161,15 +159,14 @@ function makePlayer(slot: 1 | 2): Player3D {
 }
 
 export function initGame(mySlot: 1 | 2): Arena3DState {
-  _bid = 0
   return {
-    phase: 'ready',
+    phase: 'playing',
     myPlayer: makePlayer(mySlot),
     oppPlayer: makePlayer(mySlot === 1 ? 2 : 1),
     myBullets: [], oppBullets: [],
     winner: null,
-    readyTimer: 3000,
-    message: 'READY!',
+    nextBulletId: 0,
+    message: '',
     mySlot,
   }
 }
@@ -191,12 +188,6 @@ export function update(
   }
   let didWin = false
 
-  if (s.phase === 'ready') {
-    s.readyTimer -= dt
-    if (oppPacket) s = applyOppPacket(s, oppPacket)
-    if (s.readyTimer <= 0) s = { ...s, phase: 'playing', message: '' }
-    return { next: s, didWin: false }
-  }
   if (s.phase !== 'playing') return { next: s, didWin: false }
 
   const dtS = dt / 1000
@@ -251,7 +242,7 @@ export function update(
   if (input.shooting && s.myPlayer.alive && s.myPlayer.shootCooldown <= 0 && s.myPlayer.ammo > 0 && s.myPlayer.reloadTimer <= 0) {
     const a = s.myPlayer.rotY
     s.myBullets = [...s.myBullets, {
-      id: ++_bid,
+      id: ++s.nextBulletId,
       x: s.myPlayer.x + Math.sin(a) * (PLAYER_RADIUS + BULLET_RADIUS + 0.2),
       z: s.myPlayer.z + Math.cos(a) * (PLAYER_RADIUS + BULLET_RADIUS + 0.2),
       vx: Math.sin(a) * BULLET_SPEED,

@@ -28,7 +28,7 @@ export default function Arena3DGame({ matchCtx, onWinner }: Props) {
   const winnerSentRef = useRef(false)
   const rafRef        = useRef(0)
   const [displayKills, setDisplayKills] = useState({ my: 0, opp: 0 })
-  const [displayPhase, setDisplayPhase] = useState<Arena3DState['phase']>('ready')
+  const [displayPhase, setDisplayPhase] = useState<Arena3DState['phase']>('playing')
   const [displayAmmo,  setDisplayAmmo]  = useState({ ammo: MAX_AMMO, reloading: false, reloadKey: 0 })
   const [restartKey, setRestartKey]     = useState(0)
 
@@ -40,7 +40,7 @@ export default function Arena3DGame({ matchCtx, onWinner }: Props) {
     stateRef.current      = initGame(mySlot)
     setDisplayKills({ my: 0, opp: 0 })
     setDisplayAmmo({ ammo: MAX_AMMO, reloading: false, reloadKey: 0 })
-    setDisplayPhase('ready')
+    setDisplayPhase('playing')
     setRestartKey(k => k + 1)
   }
 
@@ -282,14 +282,6 @@ export default function Arena3DGame({ matchCtx, onWinner }: Props) {
 
 
         {/* Phase overlays */}
-        {displayPhase === 'ready' && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <span className="font-px text-[18px] text-white tracking-widest" style={{ textShadow: '0 0 20px rgba(0,212,255,0.8)' }}>
-              READY!
-            </span>
-          </div>
-        )}
-
         {displayPhase === 'gameOver' && !matchCtx && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/60">
             <span className="font-px text-[14px] text-white tracking-widest" style={{ textShadow: '0 0 20px rgba(0,212,255,0.8)' }}>

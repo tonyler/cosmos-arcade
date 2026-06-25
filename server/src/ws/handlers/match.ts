@@ -4,6 +4,7 @@ import { settleMatch, cancelMatchOnChain, abortMatchOnChain } from '../../chain/
 import { telem } from '../telemetry'
 import type { BetCreate, CasualCreate, MatchCancel, Bet } from './types'
 import { getGame, type GamePlugin } from '../../games/registry'
+import { evaluateGameOver } from './consensus'
 
 // ── Match factory ─────────────────────────────────────────────────────────────
 
@@ -35,6 +36,8 @@ function createMatch(p1: string, p2: string, gameSlug: string): Match {
 }
 
 const activeMatches = new Map<string, Match>()
+// Tracks matches in the 3s countdown window: bet.status is already 'active' but game hasn't started
+const countdownStarted = new Set<string>()
 
 export function broadcastOpenMatch(matchId: string, gameSlug: string, creator: string, isCasual: boolean, amount?: string, denom?: string) {
   broadcast('lobby:open_match', { matchId, gameSlug, creator, isCasual, amount: amount ?? null, denom: denom ?? null }, creator)
@@ -42,6 +45,7 @@ export function broadcastOpenMatch(matchId: string, gameSlug: string, creator: s
 
 function cleanupMatch(matchId: string, creator?: string, opponent?: string) {
   activeMatches.delete(matchId)
+  countdownStarted.delete(matchId)
   redis.del(`match:settling:${matchId}`).catch(() => {})
   redis.del(`match:ready:${matchId}`).catch(() => {})
   const dels = [`match:bet:${matchId}`]
@@ -197,8 +201,10 @@ export async function handlePlayerReady(address: string, matchId: string) {
     const match = createMatch(activeBet.creator, activeBet.opponent!, activeBet.gameSlug)
     attachCompletion(match, matchId, activeBet.creator, activeBet.opponent!, activeBet)
     activeMatches.set(matchId, match)
+    countdownStarted.add(matchId)
 
     setTimeout(() => {
+      countdownStarted.delete(matchId)
       send(activeBet.creator, 'match:begin', { matchId, p1: activeBet.creator, p2: activeBet.opponent })
       send(activeBet.opponent!, 'match:begin', { matchId, p1: activeBet.creator, p2: activeBet.opponent })
       telem('match:begin', { matchId, p1: activeBet.creator, p2: activeBet.opponent, gameSlug: activeBet.gameSlug, amount: activeBet.amount, denom: activeBet.denom })
@@ -231,7 +237,7 @@ export async function handleAbortMatch(address: string, matchId: string) {
 
   // Allow abort during joined AND active-but-not-yet-started (countdown window)
   if (bet.status !== 'joined' && bet.status !== 'active') return
-  if (bet.status === 'active' && activeMatches.has(matchId)) return  // game in progress, forfeit handles it
+  if (bet.status === 'active' && (activeMatches.has(matchId) || countdownStarted.has(matchId))) return  // game in progress or countdown running — forfeit handles disconnect
   if (bet.creator !== address && bet.opponent !== address) return
 
   const other = bet.creator === address ? bet.opponent : bet.creator
@@ -319,8 +325,8 @@ export function handleGameState(from: string, matchId: string, stateData: unknow
   if (JSON.stringify(stateData).length > 8192) return
   const other = match.player1 === from ? match.player2 : match.player1
 
-  // Track kills for shooter matches to validate game:over claims
-  if (match.gameSlug === 'shooter') {
+  // Track kills for client-authoritative matches to validate game:over claims and resolve disputes
+  if (match.gameSlug === 'shooter' || match.gameSlug === 'arena3d') {
     const data = stateData as Record<string, unknown>
     if (typeof data.kills === 'number') {
       const killKey = `match:kills:${matchId}:${from}`
@@ -419,16 +425,33 @@ export async function handleGameOver(from: string, matchId: string, winner: stri
   const otherReport = other ? await redis.get(`match:gameover:${matchId}:${other}`) : null
 
   if (otherReport !== null) {
-    if (otherReport !== winner) {
-      await markDisputed(matchId, bet, from, winner, other, otherReport)
-    } else {
-      await doSettle(matchId, winner, from)
+    // Both players reported — for shooter, use server-tracked kills as tiebreaker on disagreement.
+    // arena3d kills come from untrusted client packets and must NOT be used for auto-settlement:
+    // a cheating client could send inflated kills to win any dispute. arena3d disputes go to admin.
+    let serverKills: Record<string, number> | undefined
+    if (bet.gameSlug === 'shooter') {
+      const [myKillsRaw, otherKillsRaw] = await Promise.all([
+        redis.get(`match:kills:${matchId}:${from}`),
+        redis.get(`match:kills:${matchId}:${other!}`),
+      ])
+      serverKills = {
+        [from]:   myKillsRaw   !== null ? parseInt(myKillsRaw,   10) : 0,
+        [other!]: otherKillsRaw !== null ? parseInt(otherKillsRaw, 10) : 0,
+      }
     }
+    const result = evaluateGameOver(from, winner, otherReport, bet, serverKills)
+    if (result.action === 'settle') {
+      await doSettle(matchId, result.winner, from)
+    } else if (result.action === 'dispute') {
+      await markDisputed(matchId, bet, result.p1, result.p1Winner, result.p2, result.p2Winner)
+    }
+    // 'wait' cannot occur here (otherReport !== null guarantees both reported)
     return
   }
 
   // Only one report so far — for casual matches use timeout fallback; for competitive require both reports
-  if (bet.isCasual) {
+  // arena3d is excluded from single-report timeout: client positions are untrusted, so require consensus
+  if (bet.isCasual && bet.gameSlug !== 'arena3d') {
     setTimeout(async () => {
       const alreadySettling = await redis.exists(`match:settling:${matchId}`)
       if (alreadySettling) return

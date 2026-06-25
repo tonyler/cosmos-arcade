@@ -56,7 +56,7 @@ export default function GamePage({ slug }: Props) {
       <div className="relative flex-1 min-h-0 w-full flex items-center justify-center px-2 md:px-6 overflow-hidden">
         <Suspense fallback={<GameLoader />}>
           {GameComponent
-            ? <GameComponent matchCtx={ctx ?? undefined} onWinner={announceWinner} />
+            ? <GameComponent matchCtx={ctx ?? undefined} onWinner={game?.serverAuthoritative ? undefined : announceWinner} />
             : <ComingSoon game={game} />
           }
         </Suspense>

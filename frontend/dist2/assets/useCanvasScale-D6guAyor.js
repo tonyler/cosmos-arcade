@@ -1,0 +1,1 @@
+import{r}from"./index.hackathon2-fEfpHwMe.js";function d(e,n,i,o=160){const[s,u]=r.useState(e);return r.useEffect(()=>{function t(){const w=window.innerWidth-32,a=window.innerHeight-o;u(Math.min(e,w/n,a/i))}return t(),window.addEventListener("resize",t),()=>window.removeEventListener("resize",t)},[e,n,i,o]),s}export{d as u};

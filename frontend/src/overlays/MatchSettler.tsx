@@ -1,12 +1,15 @@
 import { useMatchStore } from '../store/matchStore'
 import { truncate, toDisplay, DENOM_LABEL } from '../lib/format'
 
+// ponytail: mirrors SETTLE_GAS_RESERVE in contracts/escrow/src/fees.rs
+const SETTLE_FEE = 5000
+
 export default function MatchSettler() {
   const { phase, gameMode, winner, myAddress, iAmWinner, amount, denom, matchId, txHash, opponentDisconnected, reset } = useMatchStore()
 
   const isCasual = gameMode === 'casual'
   const iWon = iAmWinner ?? (winner === myAddress)
-  const payout = amount ? toDisplay(String(Number(amount) * 2)) : '?'
+  const payout = amount ? toDisplay(String(Number(amount) * 2 - SETTLE_FEE)) : '?'
   const symbol = denom ? (DENOM_LABEL[denom] ?? denom) : ''
 
   if (phase === 'playing' && opponentDisconnected) {

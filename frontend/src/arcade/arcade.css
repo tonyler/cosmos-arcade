@@ -1,0 +1,159 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   ARCADE.CSS — COSMOS NEXUS IDENTITY
+   Modern gaming platform with arcade DNA. Scoped to [data-arcade].
+   70% sleek dark gaming platform / 30% arcade essence (neon, gold accents).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 1. FONTS ─────────────────────────────────────────────────────────────
+   Russo One for logo/headings — bold geometric, modern gaming feel.
+   Fix the hard-coded tiny sizes used with the old pixel font.
+   ──────────────────────────────────────────────────────────────────────── */
+[data-arcade] .font-px {
+  font-family: 'Russo One', sans-serif !important;
+  letter-spacing: 0.04em !important;
+}
+
+/* Upscale the pixel-era hard-coded sizes to fit Russo One proportions */
+[data-arcade] .font-px.text-\[9px\]  { font-size: 13px !important; line-height: 1.35 !important; }
+[data-arcade] .font-px.text-\[11px\] { font-size: 16px !important; line-height: 1.3  !important; }
+
+/* ── 2. BACKGROUNDS ──────────────────────────────────────────────────────── */
+[data-arcade] .bg-c-bg      { background-color: #04040d !important; }
+[data-arcade] .bg-c-panel   { background-color: #08081a !important; }
+[data-arcade] .bg-c-surface { background-color: #0e0e22 !important; }
+[data-arcade] .bg-c-surface2{ background-color: #14142c !important; }
+
+/* ── 3. BORDERS ───────────────────────────────────────────────────────────── */
+[data-arcade] .border-c-border  { border-color: rgba(109,40,217,0.18)  !important; }
+[data-arcade] .border-c-borderhi{ border-color: rgba(139,92,246,0.40)  !important; }
+
+/* Panel glow — violet tint, softer than pac-man blue */
+[data-arcade] aside {
+  background: rgba(8, 8, 26, 0.85) !important;
+  backdrop-filter: blur(24px) !important;
+  -webkit-backdrop-filter: blur(24px) !important;
+  box-shadow: 1px 0 0 rgba(109,40,217,0.25), 6px 0 32px rgba(109,40,217,0.06) !important;
+}
+[data-arcade] header {
+  background: rgba(8, 8, 26, 0.80) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  box-shadow: 0 1px 0 rgba(109,40,217,0.22), 0 4px 24px rgba(109,40,217,0.06) !important;
+}
+
+/* ── 4. TEXT — natural slate palette, no forced color shifts ─────────────── */
+[data-arcade] .text-slate-100 { color: #f1f5f9 !important; }
+[data-arcade] .text-slate-200 { color: #e2e8f0 !important; }
+[data-arcade] .text-slate-300 { color: #cbd5e1 !important; }
+[data-arcade] .text-slate-400 { color: #94a3b8 !important; }
+[data-arcade] .text-slate-500 { color: #64748b !important; }
+[data-arcade] .text-slate-600 { color: #475569 !important; }
+
+/* violet-400 → brand violet (remove old yellow override, let it glow) */
+[data-arcade] .text-violet-400 { color: #a78bfa !important; }
+[data-arcade] .text-violet-300 { color: #c4b5fd !important; }
+
+/* ── 5. VIOLET BACKGROUNDS — neon quality instead of flat yellow ─────────── */
+[data-arcade] .bg-violet-700 {
+  background-color: #6d28d9 !important;
+  box-shadow: 0 0 18px rgba(109,40,217,0.45) !important;
+}
+[data-arcade] .bg-violet-600 { background-color: #7c3aed !important; }
+[data-arcade] .bg-violet-500 { background-color: #8b5cf6 !important; }
+[data-arcade] .bg-violet-900\/20 { background-color: rgba(109,40,217,0.12) !important; }
+[data-arcade] .bg-violet-950\/80 { background-color: rgba(8,8,26,0.90)    !important; }
+
+/* ── 6. VIOLET BORDERS ───────────────────────────────────────────────────── */
+[data-arcade] .border-violet-600\/70 { border-color: rgba(124,58,237,0.7)  !important; }
+[data-arcade] .border-violet-600\/20 { border-color: rgba(124,58,237,0.2)  !important; }
+[data-arcade] .border-violet-600     { border-color: #7c3aed               !important; }
+[data-arcade] .border-violet-500     { border-color: #8b5cf6               !important; }
+
+/* ── 7. HOVER STATES ─────────────────────────────────────────────────────── */
+[data-arcade] .hover\:bg-violet-600:hover {
+  background-color: #7c3aed !important;
+  box-shadow: 0 0 22px rgba(124,58,237,0.5) !important;
+}
+[data-arcade] .hover\:border-violet-600\/70:hover { border-color: rgba(124,58,237,0.7) !important; }
+[data-arcade] .hover\:text-slate-300:hover         { color: #e2e8f0 !important; }
+[data-arcade] .hover\:text-slate-200:hover         { color: #f1f5f9 !important; }
+[data-arcade] .hover\:bg-white\/5:hover            { background-color: rgba(139,92,246,0.06) !important; }
+
+/* ── 8. GAME CARDS ────────────────────────────────────────────────────────── */
+/* Keep the subtle lift, add violet glow instead of yellow */
+[data-arcade] .group:hover {
+  border-color: rgba(139,92,246,0.45) !important;
+  box-shadow: 0 0 0 1px rgba(139,92,246,0.12), 0 8px 32px rgba(109,40,217,0.18) !important;
+}
+
+/* Play button: violet + neon shadow */
+[data-arcade] .shadow-\[0_3px_0_\#3b0f8a\] {
+  box-shadow: 0 2px 0 rgba(88,28,135,0.9), 0 0 14px rgba(109,40,217,0.35) !important;
+}
+[data-arcade] .active\:translate-y-\[3px\]:active {
+  transform: translateY(3px) !important;
+}
+
+/* Button text: white on violet bg */
+[data-arcade] .bg-violet-700 { color: #ffffff !important; }
+
+/* ── 9. ACTIVE SIDEBAR STATE ─────────────────────────────────────────────── */
+[data-arcade] .bg-violet-900\/20.text-slate-100 {
+  background-color: rgba(109,40,217,0.12) !important;
+  color: #a78bfa !important;
+}
+
+/* Sidebar active indicator bar */
+[data-arcade] .bg-violet-500 { background-color: #8b5cf6 !important; }
+
+/* ── 10. SCROLLBAR — thin violet ─────────────────────────────────────────── */
+[data-arcade] * {
+  scrollbar-color: rgba(124,58,237,0.5) rgba(8,8,26,0.8);
+}
+[data-arcade] *::-webkit-scrollbar       { width: 4px; height: 4px; }
+[data-arcade] *::-webkit-scrollbar-thumb { background: rgba(124,58,237,0.55); border-radius: 2px; }
+[data-arcade] *::-webkit-scrollbar-track { background: #08081a; }
+
+/* ── 11. CATEGORY PILLS — keep amber/cyan/red but slightly desaturated ────── */
+[data-arcade] [class*="text-amber-400"]   { color: #f59e0b !important; }
+[data-arcade] [class*="border-amber-500"] { border-color: rgba(245,158,11,0.35) !important; }
+[data-arcade] [class*="bg-amber-500"]     { background-color: rgba(245,158,11,0.08) !important; }
+
+/* ── 12. ANIMATION UTILITIES ─────────────────────────────────────────────── */
+
+/* ponytail: arcade-blink kept for score strip watermark */
+.arcade-blink {
+  animation: arcade-blink 1s step-end infinite;
+}
+@keyframes arcade-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+.arcade-glow-pulse {
+  animation: arcade-glow-pulse-anim 3s ease-in-out infinite;
+}
+@keyframes arcade-glow-pulse-anim {
+  0%, 100% { text-shadow: 0 0 8px rgba(139,92,246,0.4),  0 0 24px rgba(109,40,217,0.15); }
+  50%       { text-shadow: 0 0 14px rgba(139,92,246,0.7), 0 0 40px rgba(109,40,217,0.30); }
+}
+
+/* ── 13. UTILITY CLASSES ─────────────────────────────────────────────────── */
+
+/* Primary neon: violet */
+.text-neon-violet {
+  color: #a78bfa;
+  text-shadow: 0 0 10px rgba(167,139,250,0.55), 0 0 28px rgba(124,58,237,0.25);
+}
+
+/* Arcade DNA accent: gold — use sparingly */
+.text-neon-gold {
+  color: #f59e0b;
+  text-shadow: 0 0 10px rgba(245,158,11,0.50), 0 0 26px rgba(245,158,11,0.20);
+}
+
+/* Back-compat alias for any explicit .text-neon-yellow usage */
+.text-neon-yellow {
+  color: #f59e0b;
+  text-shadow: 0 0 8px rgba(245,158,11,0.50), 0 0 20px rgba(245,158,11,0.20);
+}
